@@ -74,7 +74,7 @@ fn fetch_from_lrclib(title: &str, artist: &str, duration_secs: u64) -> Option<Tr
             String::new()
         }
     );
-    if let Ok(resp) = agent.get(&get_url).set("User-Agent", "RustTune/0.1").call() {
+    if let Ok(resp) = agent.get(&get_url).set("User-Agent", "RustTune/1.0").call() {
         if let Ok(data) = resp.into_json::<LrcLibResp>() {
             if let Some(synced) = data.synced_lyrics {
                 let parsed = parse_lrc(&synced);
@@ -91,7 +91,7 @@ fn fetch_from_lrclib(title: &str, artist: &str, duration_secs: u64) -> Option<Tr
     // 2. Fuzzy search so minor title/artist formatting differences still find real-time synced .lrc
     let search_q = format!("{clean_artist} {clean_title}");
     let search_url = format!("https://lrclib.net/api/search?q={}", url_encode(&search_q));
-    if let Ok(resp) = agent.get(&search_url).set("User-Agent", "RustTune/0.1").call() {
+    if let Ok(resp) = agent.get(&search_url).set("User-Agent", "RustTune/1.0").call() {
         if let Ok(items) = resp.into_json::<Vec<LrcLibResp>>() {
             let best_synced = items
                 .iter()
