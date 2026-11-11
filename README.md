@@ -43,6 +43,27 @@ An audio-only, gamepad-first YouTube Music player built with Rust and Slint for 
 | :---: | :---: | :---: | :---: |
 | ![Phone Now](screenshot/webphonenow.png) | ![Phone Library](screenshot/webphonelibrary.png) | ![Phone Import](screenshot/webphoneimport.png) | ![Phone Files](screenshot/webphonefile.png) |
 
+## Installation (RG35XX H / ROCKNIX)
+
+### Option 1: PortMaster Autoinstall (Recommended)
+
+1. Download `rusttune.zip` from the [GitHub Releases](https://github.com/dfrost16/rusttune/releases) page.
+2. Copy `rusttune.zip` to your handheld's PortMaster `autoinstall` folder (via SD card or ROCKNIX SMB share):
+   - `ports/PortMaster/autoinstall/rusttune.zip` (or `/roms/ports/PortMaster/autoinstall/rusttune.zip`)
+3. Open **PortMaster** on your handheld; it will install RustTune automatically.
+4. Launch **RustTune** from **Ports** in EmulationStation.
+
+### Option 2: Manual Install
+
+1. Extract `rusttune.zip` so both `RustTune.sh` and the `rusttune/` folder sit inside your `ports/` directory (for example `/roms/ports/RustTune.sh` and `/roms/ports/rusttune/`).
+2. Refresh your games list in EmulationStation and launch **RustTune** from **Ports**.
+
+### Using the Local Web UI
+
+1. Connect your RG35XX H and phone/PC to the same Wi-Fi network.
+2. Open **Find** (or press **SELECT** for **Settings**) on the handheld to view the local URL (such as `http://192.168.x.x:8080`) and your 6-digit pairing PIN.
+3. Open that URL explicitly with `http://` in your browser and enter the 6-digit PIN.
+
 ## Controls (RG35XX H)
 
 | Screen | Button | Action |
@@ -114,3 +135,8 @@ An audio-only, gamepad-first YouTube Music player built with Rust and Slint for 
    python build_port.py
    ```
    Outputs `dist/rusttune.zip` ready for PortMaster (`autoinstall/` or manual extraction to your ports directory).
+
+## Credits & Acknowledgments
+
+- Special thanks to [christopher-roelofs/ytc](https://github.com/christopher-roelofs/ytc) for inspiration and prior work on lightweight YouTube streaming tooling.
+- Huge thanks to the [PortMaster](https://portmaster.games) team for building and maintaining the handheld port ecosystem and runtime tooling that makes apps like this easy to ship on ROCKNIX.
