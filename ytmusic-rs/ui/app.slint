@@ -1,0 +1,2614 @@
+import "../../port/assets/fonts/Inter-Regular.ttf";
+import "../../port/assets/fonts/Inter-Bold.ttf";
+
+export struct TrackRow {
+    title: string,
+    artist: string,
+    album: string,
+    duration: string,
+    is_offline: bool,
+    is_favorite: bool,
+    is_playing: bool,
+    is_artist: bool,
+    kind: string,
+    thumb: image,
+    has_thumb: bool,
+}
+
+export struct GridCard {
+    title: string,
+    subtitle: string,
+    count_label: string,
+    initial: string,
+    accent: color,
+    is_fav: bool,
+    thumb: image,
+    has_thumb: bool,
+}
+
+export struct PlaylistRow {
+    name: string,
+    count_label: string,
+    contains_target: bool,
+}
+
+component MarqueeText inherits Rectangle {
+    in property <string> text;
+    in property <color> text-color;
+    in property <length> font-size: 13px;
+    in property <int> font-weight: 700;
+    in property <bool> active: true;
+    min-width: 0px;
+    preferred-width: 0px;
+    horizontal-stretch: 1;
+    clip: true;
+    height: m.preferred-height;
+    Rectangle {
+        width: 0px;
+        height: 0px;
+        clip: true;
+        m := Text {
+            visible: false;
+            text: root.text;
+            font-size: root.font-size;
+            font-weight: root.font-weight;
+        }
+    }
+    property <length> over: max(0px, m.preferred-width - root.width);
+    property <float> over-f: over / 1px;
+    property <float> scroll-s: max(4.5, over-f / 22.0);
+    property <float> back-s: max(2.0, over-f / 55.0);
+    property <float> cycle: 2.5 + scroll-s + 1.8 + back-s;
+    if root.active && root.over > 0px : Text {
+        property <float> sec: mod(animation-tick() / 1s, cycle);
+        property <float> phase: sec < 2.5 ? 0.0 : (sec < (2.5 + scroll-s) ? (sec - 2.5) / scroll-s : (sec < (4.3 + scroll-s) ? 1.0 : 1.0 - (sec - 4.3 - scroll-s) / back-s));
+        x: -root.over * phase;
+        y: 0px;
+        text: root.text;
+        color: root.text-color;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+    }
+    if !(root.active && root.over > 0px) : Text {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        text: root.text;
+        color: root.text-color;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        overflow: elide;
+    }
+}
+
+export component YtMusicWindow inherits Window {
+    width: 640px;
+    height: 480px;
+    default-font-family: "Inter";
+
+    // Theme tokens (Studio Dark default; swapped dynamically for Studio Light)
+    in-out property <color> c-bg: #0e1014;
+    in-out property <color> c-card: #161922;
+    in-out property <color> c-card2: #1f2430;
+    in-out property <color> c-dock: #11131a;
+    in-out property <color> c-border: #2a303f;
+    in-out property <color> c-text: #f3f4f6;
+    in-out property <color> c-muted: #9ca3af;
+    in-out property <color> c-accent: #bef264;
+    in-out property <color> c-accent-fg: #0f172a;
+    in-out property <color> c-heart: #fb7185;
+    in-out property <color> c-ok: #4ade80;
+    in-out property <image> bg-dots;
+
+    // Top-level screen state
+    // "now" | "vibes" | "vibe_detail" | "artists" | "artist_detail" | "lib" | "find"
+    in-out property <string> active-tab: "now";
+    in-out property <string> dock-tab: "now";
+
+    // Now Playing
+    in-out property <string> now-title: "Ready to Play";
+    in-out property <string> now-artist: "Pick a Vibe, Artist, or Search";
+    in-out property <string> now-album: "";
+    in-out property <string> now-genre: "YT MUSIC";
+    in-out property <string> now-elapsed: "0:00";
+    in-out property <string> now-duration: "0:00";
+    in-out property <string> now-format: "AAC 128k";
+    in-out property <float> now-progress: 0.0;
+    in-out property <bool> is-playing: false;
+    in-out property <bool> is-favorite-now: false;
+    in-out property <bool> is-offline-now: false;
+    in-out property <image> cover-art;
+    in-out property <bool> has-cover-art: false;
+
+    // 3-line lyrics below album art
+    in-out property <string> lyric-prev: "";
+    in-out property <string> lyric-curr: "Select a track to view lyrics";
+    in-out property <string> lyric-next: "";
+
+    // Up Next + Playlist preview on Now Playing right column
+    in-out property <string> next-title: "—";
+    in-out property <string> next-artist: "";
+    in-out property <string> next-duration: "";
+    in-out property <string> playlist-label: "PLAYLIST: UP NEXT";
+    in-out property <[TrackRow]> now-playlist-rows: [];
+
+    // Grids (Vibes & Artists)
+    in-out property <[GridCard]> vibe-cards: [];
+    in-out property <int> vibe-index: 0;
+    in-out property <int> vibe-row-scroll: 0;
+    in-out property <bool> vibe-fav-only: false;
+    in-out property <string> vibe-filter: "";
+
+    in-out property <[GridCard]> artist-cards: [];
+    in-out property <int> artist-index: 0;
+    in-out property <int> artist-row-scroll: 0;
+    in-out property <bool> artist-fav-only: false;
+    in-out property <string> artist-filter: "";
+    in-out property <string> artist-page-label: "Page 1/1";
+
+    in-out property <bool> grid-kbd-open: false;
+    in-out property <string> grid-kbd-title: "SEARCH ARTISTS";
+    in-out property <[GridCard]> grid-kbd-previews: [];
+
+    // Detail & Library track lists
+    in-out property <string> detail-title: "";
+    in-out property <string> detail-subtitle: "";
+    in-out property <string> detail-count-label: "";
+    in-out property <string> artist-kicker: "ARTIST";
+    in-out property <string> artist-stats: "";
+    in-out property <int> artist-section: 0; // 0 = Top Songs, 1 = Albums, 2 = Singles & EPs
+    in-out property <int> artist-songs-count: 0;
+    in-out property <int> artist-albums-count: 0;
+    in-out property <int> artist-singles-count: 0;
+    in-out property <color> detail-accent: #bef264;
+    in-out property <bool> detail-is-fav: false;
+    in-out property <bool> detail-top-focused: false;
+    in-out property <image> detail-thumb;
+    in-out property <bool> has-detail-thumb: false;
+    in-out property <[TrackRow]> list-rows: [];
+    in-out property <int> list-index: 0;
+    in-out property <int> list-scroll: 0;
+
+    // Library
+    in-out property <string> lib-mode: "favs"; // "favs" | "playlists" | "history" | "downloads"
+    in-out property <string> lib-filter: "";
+    in-out property <string> lib-downloads-info: "";
+    in-out property <[PlaylistRow]> playlists: [];
+    in-out property <int> playlist-index: 0;
+    in-out property <bool> lib-focus-playlists: true;
+
+    // Find (QWERTY + 123 Numbers + Autocomplete + Live Hits)
+    in-out property <string> search-query: "";
+    in-out property <int> find-zone: 2; // 0 = suggestions, 1 = live hits (keyboard collapses), 2 = keyboard
+    in-out property <int> chip-index: 0;
+    in-out property <[string]> suggest-chips: [];
+    in-out property <[TrackRow]> find-hits: [];
+    in-out property <int> find-hit-index: 0;
+    in-out property <int> find-hit-scroll: 0;
+    in-out property <int> key-row: 0;
+    in-out property <int> key-col: 0;
+    in-out property <bool> kbd-num-mode: false;
+    in-out property <[string]> qwerty-keys: [
+        "Q","W","E","R","T","Y","U","I","O","P",
+        "A","S","D","F","G","H","J","K","L","DEL",
+        "Z","X","C","V","B","N","M","SPC","123","GO"
+    ];
+    in-out property <[string]> num-keys: [
+        "1","2","3","4","5","6","7","8","9","0",
+        "-","_","/",".",":","&","!","?","'","DEL",
+        "@","#","(",")","+","=","SPC","CLR","ABC","GO"
+    ];
+
+    // Confirm Modal (Batch Download / Clear Downloads)
+    in-out property <bool> confirm-open: false;
+    in-out property <string> confirm-title: "";
+    in-out property <string> confirm-body: "";
+    in-out property <string> confirm-yes-label: "Confirm";
+
+    // System & Modals
+    in-out property <string> battery-label: "84%";
+    in-out property <string> remote-url: "http://127.0.0.1:8080";
+    in-out property <bool> pocket-lock: false;
+    in-out property <string> toast-text: "";
+
+    in-out property <bool> pl-modal-open: false;
+    in-out property <int> pl-modal-index: 0;
+
+    in-out property <bool> settings-open: false;
+    in-out property <int> settings-index: 0;
+    in-out property <bool> web-server-on: true;
+    in-out property <string> web-pin-label: "";
+    in-out property <string> theme-label: "Studio Dark";
+    in-out property <bool> loop-track: false;
+    in-out property <bool> radio-autoplay: true;
+    in-out property <bool> swap-ab: false;
+
+    Rectangle {
+        width: 640px;
+        height: 480px;
+        background: root.c-bg;
+
+        Image {
+            width: 640px;
+            height: 480px;
+            source: root.bg-dots;
+        }
+
+        VerticalLayout {
+            spacing: 0px;
+
+            // =================================================================
+            // MAIN CANVAS (424px)
+            // =================================================================
+            Rectangle {
+                height: 424px;
+                width: 640px;
+                background: transparent;
+
+                // -------------------------------------------------------------
+                // 1. NOW PLAYING
+                // -------------------------------------------------------------
+                if root.active-tab == "now" : HorizontalLayout {
+                    padding: 18px;
+                    spacing: 18px;
+
+                    // Left Column: Album Art + 3-Line Lyrics + Duration/Bitrate
+                    VerticalLayout {
+                        width: 224px;
+                        spacing: 10px;
+
+                        // Album Art Card
+                        Rectangle {
+                            height: 182px;
+                            background: root.c-card;
+                            border-width: 1px;
+                            border-color: root.c-border;
+                            border-radius: 16px;
+
+                            Rectangle {
+                                x: 10px;
+                                y: 10px;
+                                width: 204px;
+                                height: 162px;
+                                border-radius: 12px;
+                                background: root.c-card2;
+                                clip: true;
+
+                                if root.has-cover-art : Image {
+                                    width: 204px;
+                                    height: 162px;
+                                    source: root.cover-art;
+                                    image-fit: cover;
+                                }
+
+                                if !root.has-cover-art : Rectangle {
+                                    width: 204px;
+                                    height: 162px;
+                                    background: root.c-card2;
+                                    Rectangle {
+                                        width: 72px;
+                                        height: 72px;
+                                        x: 66px;
+                                        y: 45px;
+                                        border-radius: 36px;
+                                        border-width: 4px;
+                                        border-color: root.c-accent;
+                                        Rectangle {
+                                            width: 18px;
+                                            height: 18px;
+                                            x: 27px;
+                                            y: 27px;
+                                            border-radius: 9px;
+                                            background: root.c-accent;
+                                        }
+                                    }
+                                }
+
+                                // LIVE / PAUSE pill
+                                Rectangle {
+                                    x: 8px;
+                                    y: 8px;
+                                    height: 20px;
+                                    width: st-lbl.preferred-width + 14px;
+                                    border-radius: 10px;
+                                    background: #00000099;
+                                    st-lbl := Text {
+                                        text: root.is-playing ? "● LIVE" : "❚❚ HOLD";
+                                        color: #ffffff;
+                                        font-size: 11px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                // Duration pill
+                                Rectangle {
+                                    x: 204px - dur-lbl.preferred-width - 22px;
+                                    y: 8px;
+                                    height: 20px;
+                                    width: dur-lbl.preferred-width + 14px;
+                                    border-radius: 10px;
+                                    background: #00000099;
+                                    dur-lbl := Text {
+                                        text: root.now-duration;
+                                        color: #ffffff;
+                                        font-size: 11px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3-Line Synced Lyrics Card directly below Album Art (fixed row heights prevent jump/glitch)
+                        Rectangle {
+                            vertical-stretch: 1;
+                            background: root.c-card;
+                            border-width: 1px;
+                            border-color: root.c-border;
+                            border-radius: 14px;
+
+                            VerticalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                padding-top: 6px;
+                                padding-bottom: 6px;
+                                alignment: center;
+                                spacing: 4px;
+
+                                Text {
+                                    height: 18px;
+                                    text: root.lyric-prev;
+                                    color: root.c-muted;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    height: 20px;
+                                    text: root.lyric-curr;
+                                    color: root.c-accent;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    height: 18px;
+                                    text: root.lyric-next;
+                                    color: root.c-muted;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+
+                        // Duration + Format/Bitrate + Play hint
+                        HorizontalLayout {
+                            padding-left: 4px;
+                            padding-right: 4px;
+                            Text {
+                                text: root.now-elapsed + " / " + root.now-duration + " · " + root.now-format;
+                                color: root.is-offline-now ? root.c-ok : root.c-muted;
+                                font-size: 11px;
+                                font-weight: 700;
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            Text {
+                                text: root.is-playing ? "A: Pause" : "A: Play";
+                                color: root.c-accent;
+                                font-size: 11px;
+                                font-weight: 700;
+                            }
+                        }
+                    }
+
+                    // Right Column: Header + Fav/+List/DL Strip + Up Next + Playlist
+                    VerticalLayout {
+                        width: 362px;
+                        spacing: 10px;
+
+                        // Genre Pill + Seek Hint + Title + Artist
+                        VerticalLayout {
+                            min-width: 0px;
+                            spacing: 3px;
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Rectangle {
+                                    height: 22px;
+                                    width: g-txt.preferred-width + 16px;
+                                    border-radius: 11px;
+                                    background: root.c-accent;
+                                    g-txt := Text {
+                                        text: root.now-genre;
+                                        color: root.c-accent-fg;
+                                        font-size: 11px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                if root.loop-track : Rectangle {
+                                    height: 22px;
+                                    width: lp-t.preferred-width + 12px;
+                                    border-radius: 11px;
+                                    border-width: 1px;
+                                    border-color: root.c-accent;
+                                    background: root.c-card;
+                                    lp-t := Text {
+                                        text: "⟳ LOOP";
+                                        color: root.c-accent;
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                                Text {
+                                    text: "L2/R2 Skip · R3 Loop · SEL Menu";
+                                    color: root.c-muted;
+                                    font-size: 10px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            MarqueeText {
+                                text: root.now-title;
+                                text-color: root.c-text;
+                                font-size: 21px;
+                                font-weight: 700;
+                                active: root.active-tab == "now";
+                            }
+                            MarqueeText {
+                                text: root.now-album == "" ? root.now-artist : (root.now-artist + " · " + root.now-album);
+                                text-color: root.c-muted;
+                                font-size: 13px;
+                                font-weight: 600;
+                                active: root.active-tab == "now";
+                            }
+                        }
+
+                        // Action Strip: Fav | + List | Download
+                        HorizontalLayout {
+                            spacing: 8px;
+                            height: 32px;
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                border-radius: 10px;
+                                border-width: 1px;
+                                border-color: root.c-border;
+                                background: root.is-favorite-now ? root.c-heart : root.c-card;
+                                Text {
+                                    text: root.is-favorite-now ? "♥ Fav (X)" : "♡ Fav (X)";
+                                    color: root.is-favorite-now ? #ffffff : root.c-text;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                border-radius: 10px;
+                                border-width: 1px;
+                                border-color: root.c-border;
+                                background: root.c-card;
+                                Text {
+                                    text: "+ List (ST)";
+                                    color: root.c-text;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                border-radius: 10px;
+                                border-width: 1px;
+                                border-color: root.c-border;
+                                background: root.is-offline-now ? root.c-ok : root.c-card;
+                                Text {
+                                    text: root.is-offline-now ? "✓ Saved (Y)" : "↓ DL (Y)";
+                                    color: root.is-offline-now ? #0f172a : root.c-text;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Up Next Card
+                        Rectangle {
+                            height: 52px;
+                            background: root.c-card;
+                            border-width: 1px;
+                            border-color: root.c-accent;
+                            border-radius: 12px;
+
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 8px;
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    min-width: 0px;
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text {
+                                        text: "UP NEXT (TRACK 1)";
+                                        color: root.c-accent;
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                    }
+                                    MarqueeText {
+                                        text: root.next-artist == "" ? root.next-title : (root.next-title + " — " + root.next-artist);
+                                        text-color: root.c-text;
+                                        font-size: 12px;
+                                        font-weight: 700;
+                                        active: root.active-tab == "now";
+                                    }
+                                }
+                                if root.next-duration != "" : Text {
+                                    text: root.next-duration;
+                                    color: root.c-muted;
+                                    font-size: 12px;
+                                    horizontal-stretch: 0;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Playlist / Queue Rows
+                        Rectangle {
+                            vertical-stretch: 1;
+                            background: root.c-card;
+                            border-width: 1px;
+                            border-color: root.c-border;
+                            border-radius: 14px;
+                            clip: true;
+
+                            VerticalLayout {
+                                spacing: 0px;
+                                Rectangle {
+                                    height: 28px;
+                                    HorizontalLayout {
+                                        padding-left: 12px;
+                                        padding-right: 12px;
+                                        Text {
+                                            text: root.playlist-label;
+                                            color: root.c-muted;
+                                            font-size: 10px;
+                                            font-weight: 700;
+                                            vertical-alignment: center;
+                                        }
+                                        Rectangle { horizontal-stretch: 1; }
+                                        Text {
+                                            text: "▲/▼ Skip";
+                                            color: root.c-accent;
+                                            font-size: 10px;
+                                            font-weight: 700;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    Rectangle {
+                                        x: 0px;
+                                        y: 27px;
+                                        width: parent.width;
+                                        height: 1px;
+                                        background: root.c-border;
+                                    }
+                                }
+
+                                for row[idx] in root.now-playlist-rows : Rectangle {
+                                    height: 36px;
+                                    HorizontalLayout {
+                                        padding-left: 12px;
+                                        padding-right: 12px;
+                                        spacing: 8px;
+                                        Text {
+                                            text: (idx + 2) + ".";
+                                            color: root.c-muted;
+                                            font-size: 11px;
+                                            vertical-alignment: center;
+                                        }
+                                        VerticalLayout {
+                                            horizontal-stretch: 1;
+                                            min-width: 0px;
+                                            alignment: center;
+                                            MarqueeText {
+                                                text: row.title + " — " + row.artist;
+                                                text-color: root.c-text;
+                                                font-size: 12px;
+                                                font-weight: 600;
+                                                active: root.active-tab == "now";
+                                            }
+                                        }
+                                        if row.duration != "" : Text {
+                                            text: row.duration;
+                                            color: root.c-muted;
+                                            font-size: 11px;
+                                            horizontal-stretch: 0;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    Rectangle {
+                                        x: 0px;
+                                        y: 35px;
+                                        width: parent.width;
+                                        height: 1px;
+                                        background: root.c-border;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // -------------------------------------------------------------
+                // 2. VIBES / GENRES 3x2 GRID
+                // -------------------------------------------------------------
+                if root.active-tab == "vibes" : VerticalLayout {
+                    padding: 16px;
+                    spacing: 12px;
+
+                    HorizontalLayout {
+                        height: 34px;
+                        spacing: 10px;
+                        Text {
+                            text: "Vibes";
+                            color: root.c-text;
+                            font-size: 18px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 10px;
+                            background: root.c-card;
+                            border-width: 1px;
+                            border-color: root.c-border;
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                spacing: 6px;
+                                Path {
+                                    width: 13px;
+                                    height: 13px;
+                                    y: 10px;
+                                    viewbox-x: 0; viewbox-y: 0; viewbox-width: 24; viewbox-height: 24;
+                                    commands: "M11 4a7 7 0 1 0 0 14 7 7 0 1 0 0-14z M21 21l-4.35-4.35";
+                                    stroke: root.c-muted;
+                                    stroke-width: 2.2px;
+                                }
+                                Text {
+                                    text: root.vibe-filter == "" ? "R3: Filter  ·  X: ♥ Vibe" : ("Filter: " + root.vibe-filter);
+                                    color: root.vibe-filter == "" ? root.c-muted : root.c-text;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                        Rectangle {
+                            width: 78px;
+                            border-radius: 10px;
+                            border-width: 1px;
+                            border-color: root.c-border;
+                            background: root.vibe-fav-only ? root.c-heart : root.c-card;
+                            Text {
+                                text: "♥ Favs (Y)";
+                                color: root.vibe-fav-only ? #ffffff : root.c-text;
+                                font-size: 11px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    // 3x2 Scrollable Cards
+                    Rectangle {
+                        vertical-stretch: 1;
+                        clip: true;
+                        if root.vibe-cards.length == 0 : Text {
+                            text: "No matching Vibes. Press Y to show all.";
+                            color: root.c-muted;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        for card[i] in root.vibe-cards : Rectangle {
+                            property <int> grid-col: mod(i, 3);
+                            property <int> grid-row: floor(i / 3) - root.vibe-row-scroll;
+                            property <bool> sel: root.vibe-index == i;
+                            property <int> pat: mod(i, 4);
+                            x: grid-col * 206px;
+                            y: grid-row * 174px;
+                            width: 196px;
+                            height: 164px;
+                            visible: grid-row >= 0 && grid-row < 2;
+                            border-radius: 16px;
+                            background: root.c-card;
+                            clip: true;
+
+                            // Multi-structured static gradient layers varied per tile (pat 0..3)
+                            if pat == 0 : Rectangle {
+                                width: 100%; height: 100%;
+                                opacity: sel ? 0.62 : 0.40;
+                                background: @radial-gradient(circle, card.accent 0%, #00000000 82%);
+                            }
+                            if pat == 1 : Rectangle {
+                                width: 100%; height: 100%;
+                                opacity: sel ? 0.56 : 0.36;
+                                background: @linear-gradient(215deg, card.accent 0%, #00000000 68%);
+                            }
+                            if pat == 2 : Rectangle {
+                                width: 100%; height: 100%;
+                                opacity: sel ? 0.54 : 0.34;
+                                background: @linear-gradient(90deg, card.accent 0%, #00000000 72%);
+                            }
+                            if pat == 3 : Rectangle {
+                                width: 100%; height: 100%;
+                                opacity: sel ? 0.56 : 0.36;
+                                background: @linear-gradient(330deg, card.accent 0%, #00000000 70%);
+                            }
+
+                            // Soft spotlight aura + bottom depth scrim so titles stay crisp in Dark/Light
+                            Rectangle {
+                                x: pat == 0 ? 78px : (pat == 1 ? -30px : (pat == 2 ? 90px : 34px));
+                                y: pat == 0 ? -36px : (pat == 1 ? 64px : (pat == 2 ? 70px : -28px));
+                                width: 150px;
+                                height: 150px;
+                                border-radius: 75px;
+                                opacity: sel ? 0.30 : 0.16;
+                                background: @radial-gradient(circle, card.accent 0%, #00000000 70%);
+                            }
+                            Rectangle {
+                                width: 100%;
+                                height: 100%;
+                                background: @linear-gradient(180deg, #00000000 35%, root.c-card 98%);
+                            }
+
+                            VerticalLayout {
+                                padding: 14px;
+                                HorizontalLayout {
+                                    Rectangle {
+                                        height: 20px;
+                                        width: vb-tag.preferred-width + 14px;
+                                        border-radius: 10px;
+                                        background: sel ? card.accent : root.c-card2;
+                                        border-width: 1px;
+                                        border-color: card.accent;
+                                        vb-tag := Text {
+                                            text: card.count_label;
+                                            color: sel ? #ffffff : root.c-text;
+                                            font-size: 9px;
+                                            font-weight: 700;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    Text {
+                                        text: card.is_fav ? "♥" : "♡";
+                                        color: card.is_fav ? root.c-heart : root.c-muted;
+                                        font-size: 13px;
+                                        font-weight: 700;
+                                    }
+                                }
+                                Rectangle { vertical-stretch: 1; }
+                                // Accent underline bar instead of corner dot
+                                Rectangle {
+                                    width: sel ? 34px : 20px;
+                                    height: 3px;
+                                    border-radius: 2px;
+                                    background: card.accent;
+                                }
+                                Rectangle { height: 5px; }
+                                Text {
+                                    text: card.title;
+                                    color: root.c-text;
+                                    font-size: 15px;
+                                    font-weight: 700;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: card.subtitle;
+                                    color: root.c-muted;
+                                    font-size: 11px;
+                                    overflow: elide;
+                                }
+                            }
+
+                            Rectangle {
+                                width: 100%;
+                                height: 100%;
+                                border-radius: 16px;
+                                border-width: sel ? 2px : 1px;
+                                border-color: sel ? root.c-accent : root.c-border;
+                                background: transparent;
+                            }
+                        }
+                    }
+                }
+
+                // -------------------------------------------------------------
+                // 3. ARTISTS 3x2 GRID
+                // -------------------------------------------------------------
+                if root.active-tab == "artists" : VerticalLayout {
+                    padding: 16px;
+                    spacing: 12px;
+
+                    HorizontalLayout {
+                        height: 34px;
+                        spacing: 10px;
+                        Text {
+                            text: "Artists";
+                            color: root.c-text;
+                            font-size: 18px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 10px;
+                            background: root.c-card;
+                            border-width: 1px;
+                            border-color: root.c-border;
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                spacing: 6px;
+                                Path {
+                                    width: 13px;
+                                    height: 13px;
+                                    y: 10px;
+                                    viewbox-x: 0; viewbox-y: 0; viewbox-width: 24; viewbox-height: 24;
+                                    commands: "M11 4a7 7 0 1 0 0 14 7 7 0 1 0 0-14z M21 21l-4.35-4.35";
+                                    stroke: root.c-muted;
+                                    stroke-width: 2.2px;
+                                }
+                                Text {
+                                    text: root.artist-filter == "" ? "R3: Filter / Search  ·  X: ♥ Artist" : ("Filter: " + root.artist-filter);
+                                    color: root.artist-filter == "" ? root.c-muted : root.c-text;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                        Rectangle {
+                            width: 78px;
+                            border-radius: 10px;
+                            border-width: 1px;
+                            border-color: root.c-border;
+                            background: root.artist-fav-only ? root.c-heart : root.c-card;
+                            Text {
+                                text: "♥ Favs (Y)";
+                                color: root.artist-fav-only ? #ffffff : root.c-text;
+                                font-size: 11px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        vertical-stretch: 1;
+                        clip: true;
+                        if root.artist-cards.length == 0 : Text {
+                            text: "No matching artists. Press R2 to search YouTube Music!";
+                            color: root.c-muted;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        for card[i] in root.artist-cards : Rectangle {
+                            property <int> grid-col: mod(i, 3);
+                            property <int> grid-row: floor(i / 3) - root.artist-row-scroll;
+                            property <bool> sel: root.artist-index == i;
+                            x: grid-col * 206px;
+                            y: grid-row * 164px;
+                            width: 196px;
+                            height: 154px;
+                            visible: grid-row >= 0 && grid-row < 2;
+                            border-radius: 16px;
+                            background: #141720;
+                            clip: true;
+
+                            // Full-bleed artist face or fallback gradient monogram
+                            if card.has_thumb : Image {
+                                width: 100%;
+                                height: 100%;
+                                source: card.thumb;
+                                image-fit: cover;
+                            }
+                            if !card.has_thumb : Rectangle {
+                                width: 100%;
+                                height: 100%;
+                                background: @linear-gradient(145deg, card.accent 0%, #11131a 100%);
+                                Text {
+                                    text: card.initial;
+                                    color: #ffffff44;
+                                    font-size: 56px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            // Clean Bottom Fade Scrim (transparent top keeps face clear)
+                            Rectangle {
+                                width: 100%;
+                                height: 100%;
+                                background: @linear-gradient(180deg, #0a0c1228 0%, #0a0c1200 34%, #0a0c1288 62%, #0a0c12eb 86%, #0a0c12f8 100%);
+                            }
+                            if !sel : Rectangle {
+                                width: 100%;
+                                height: 100%;
+                                background: #00000024;
+                            }
+
+                            VerticalLayout {
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                padding-top: 9px;
+                                padding-bottom: 10px;
+                                HorizontalLayout {
+                                    Rectangle {
+                                        height: 19px;
+                                        width: b-txt.preferred-width + 14px;
+                                        border-radius: 7px;
+                                        border-width: sel ? 0px : 1px;
+                                        border-color: #ffffff20;
+                                        background: sel ? root.c-accent : #0e1016b8;
+                                        b-txt := Text {
+                                            text: card.count_label;
+                                            color: sel ? root.c-accent-fg : #f3f4f6;
+                                            font-size: 9px;
+                                            font-weight: 700;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    Rectangle {
+                                        width: 22px;
+                                        height: 22px;
+                                        border-radius: 11px;
+                                        border-width: card.is_fav ? 0px : 1px;
+                                        border-color: #ffffff24;
+                                        background: card.is_fav ? root.c-heart : #0e1016b8;
+                                        Text {
+                                            text: card.is_fav ? "♥" : "♡";
+                                            color: card.is_fav ? #ffffff : #d1d5db;
+                                            font-size: 11px;
+                                            font-weight: 700;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                                Rectangle { vertical-stretch: 1; }
+                                Text {
+                                    text: card.title;
+                                    color: sel ? root.c-accent : #ffffff;
+                                    font-size: 14px;
+                                    font-weight: 700;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: card.subtitle;
+                                    color: #f3f4f6cc;
+                                    font-size: 10px;
+                                    overflow: elide;
+                                }
+                            }
+
+                            // Sharp outer selection ring above full-bleed photo
+                            Rectangle {
+                                width: 100%;
+                                height: 100%;
+                                border-radius: 16px;
+                                border-width: sel ? 2px : 1px;
+                                border-color: sel ? root.c-accent : root.c-border;
+                                background: transparent;
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 16px;
+                        Text {
+                            text: "A: Open Artist · X: ♥ Fav · Y: Filter Favs · R3: Search";
+                            color: root.c-muted;
+                            font-size: 10px;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text {
+                            text: root.artist-page-label;
+                            color: root.c-accent;
+                            font-size: 10px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                // -------------------------------------------------------------
+                // 4A. VIBE DETAIL OR ALBUM DETAIL
+                // -------------------------------------------------------------
+                if root.active-tab == "vibe_detail" || root.active-tab == "album_detail" : VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+
+                    Rectangle {
+                        height: 58px;
+                        background: root.c-card;
+                        border-width: 1px;
+                        border-color: root.c-border;
+                        border-radius: 14px;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 12px;
+
+                            if root.has-detail-thumb : Rectangle {
+                                width: 40px;
+                                height: 40px;
+                                y: 9px;
+                                border-radius: root.active-tab == "artist_detail" ? 20px : 8px;
+                                clip: true;
+                                Image {
+                                    width: 40px;
+                                    height: 40px;
+                                    source: root.detail-thumb;
+                                    image-fit: cover;
+                                }
+                            }
+                            if !root.has-detail-thumb : Rectangle {
+                                width: 6px;
+                                height: 34px;
+                                y: 12px;
+                                border-radius: 3px;
+                                background: root.detail-accent;
+                            }
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: center;
+                                spacing: 2px;
+                                Text {
+                                    text: root.detail-title;
+                                    color: root.c-text;
+                                    font-size: 16px;
+                                    font-weight: 700;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: root.detail-subtitle;
+                                    color: root.c-muted;
+                                    font-size: 11px;
+                                    overflow: elide;
+                                }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 4px;
+                                Text {
+                                    text: root.detail-count-label;
+                                    color: root.c-muted;
+                                    font-size: 10px;
+                                    font-weight: 700;
+                                    horizontal-alignment: right;
+                                }
+                                Rectangle {
+                                    height: 22px;
+                                    width: dl-all-t.preferred-width + 14px;
+                                    border-radius: 7px;
+                                    border-width: 1px;
+                                    border-color: root.detail-top-focused ? root.c-accent : root.c-border;
+                                    background: root.detail-top-focused ? root.c-accent : root.c-card2;
+                                    dl-all-t := Text {
+                                        text: "↓ Download All";
+                                        color: root.detail-top-focused ? root.c-accent-fg : root.c-text;
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        vertical-stretch: 1;
+                        background: root.c-card;
+                        border-width: 1px;
+                        border-color: root.c-border;
+                        border-radius: 16px;
+                        clip: true;
+
+                        if root.list-rows.length == 0 : Text {
+                            text: "Loading tracks...";
+                            color: root.c-muted;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        for tr[idx] in root.list-rows : Rectangle {
+                            property <bool> sel: !root.detail-top-focused && root.list-index == idx;
+                            x: 0px;
+                            y: (idx - root.list-scroll) * 50px;
+                            width: parent.width;
+                            height: 50px;
+                            visible: idx >= root.list-scroll && (idx - root.list-scroll) < 6;
+                            background: sel ? root.c-card2 : transparent;
+
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                spacing: 10px;
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    spacing: 2px;
+                                    MarqueeText {
+                                        text: (tr.is_playing ? "▶ " : "") + tr.title;
+                                        text-color: sel ? root.c-accent : root.c-text;
+                                        font-size: 13px;
+                                        font-weight: 700;
+                                        active: sel;
+                                    }
+                                    MarqueeText {
+                                        text: tr.album == "" ? tr.artist : (tr.artist + " · " + tr.album);
+                                        text-color: root.c-muted;
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        active: sel;
+                                    }
+                                }
+                                Text {
+                                    text: tr.is_favorite ? "♥" : "♡";
+                                    color: tr.is_favorite ? root.c-heart : root.c-muted;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: tr.is_offline ? "✓" : "↓";
+                                    color: tr.is_offline ? root.c-ok : root.c-muted;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: tr.duration;
+                                    color: root.c-muted;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            Rectangle {
+                                x: 0px;
+                                y: 49px;
+                                width: parent.width;
+                                height: 1px;
+                                background: root.c-border;
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "A: Play  ·  X: Fav  ·  Y: Download  ·  ▲ Top: DL All  ·  B: Back";
+                        color: root.c-muted;
+                        font-size: 11px;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                // -------------------------------------------------------------
+                // 4B. ARTIST DETAIL (HERO + TOP SONGS / ALBUMS / SINGLES & EPs)
+                // -------------------------------------------------------------
+                if root.active-tab == "artist_detail" : VerticalLayout {
+                    padding: 14px;
+                    spacing: 9px;
+
+                    // Hero Header Card
+                    Rectangle {
+                        height: 76px;
+                        background: root.c-card;
+                        border-width: 1px;
+                        border-color: root.c-border;
+                        border-radius: 16px;
+
+                        HorizontalLayout {
+                            padding-left: 14px;
+                            padding-right: 14px;
+                            spacing: 12px;
+
+                            Rectangle {
+                                width: 54px;
+                                height: 54px;
+                                y: 11px;
+                                border-radius: 27px;
+                                border-width: 2px;
+                                border-color: root.c-accent;
+                                background: root.detail-accent;
+                                clip: true;
+                                if root.has-detail-thumb : Image {
+                                    width: 54px;
+                                    height: 54px;
+                                    source: root.detail-thumb;
+                                    image-fit: cover;
+                                }
+                                if !root.has-detail-thumb : Text {
+                                    text: "♪";
+                                    color: #ffffff;
+                                    font-size: 20px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: center;
+                                spacing: 2px;
+                                Text {
+                                    text: root.artist-kicker;
+                                    color: root.c-accent;
+                                    font-size: 10px;
+                                    font-weight: 700;
+                                    letter-spacing: 0.6px;
+                                }
+                                MarqueeText {
+                                    text: root.detail-title;
+                                    text-color: root.c-text;
+                                    font-size: 18px;
+                                    font-weight: 700;
+                                    active: root.active-tab == "artist_detail";
+                                }
+                                Text {
+                                    text: root.artist-stats;
+                                    color: root.c-muted;
+                                    font-size: 11px;
+                                    overflow: elide;
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                if root.artist-section == 0 : Rectangle {
+                                    height: 28px;
+                                    y: 24px;
+                                    width: adl-t.preferred-width + 16px;
+                                    border-radius: 9px;
+                                    border-width: 1px;
+                                    border-color: root.detail-top-focused ? root.c-accent : root.c-border;
+                                    background: root.detail-top-focused ? root.c-accent : root.c-card2;
+                                    adl-t := Text {
+                                        text: "↓ DL All";
+                                        color: root.detail-top-focused ? root.c-accent-fg : root.c-text;
+                                        font-size: 11px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                Rectangle {
+                                    height: 28px;
+                                    y: 24px;
+                                    width: fav-chip-t.preferred-width + 18px;
+                                    border-radius: 9px;
+                                    border-width: 1px;
+                                    border-color: root.detail-is-fav ? root.c-heart : root.c-border;
+                                    background: root.detail-is-fav ? root.c-heart : root.c-card2;
+                                    fav-chip-t := Text {
+                                        text: root.detail-is-fav ? "♥ Saved" : "♡ Fav";
+                                        color: root.detail-is-fav ? #ffffff : root.c-text;
+                                        font-size: 11px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Section Tabs: Top Songs | Albums | Singles & EPs
+                    HorizontalLayout {
+                        height: 28px;
+                        spacing: 7px;
+                        for sec[si] in [
+                            { label: "Top Songs (" + root.artist-songs-count + ")" },
+                            { label: "Albums (" + root.artist-albums-count + ")" },
+                            { label: "Singles (" + root.artist-singles-count + ")" },
+                        ] : Rectangle {
+                            width: sec-lbl.preferred-width + 20px;
+                            border-radius: 9px;
+                            border-width: 1px;
+                            border-color: root.artist-section == si ? root.c-accent : root.c-border;
+                            background: root.artist-section == si ? root.c-accent : root.c-card;
+                            sec-lbl := Text {
+                                text: sec.label;
+                                color: root.artist-section == si ? root.c-accent-fg : root.c-muted;
+                                font-size: 11px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text {
+                            text: "◀/▶ Tab · " + root.detail-count-label;
+                            color: root.c-muted;
+                            font-size: 11px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    // 5-Row Scrollable Artist Content List
+                    Rectangle {
+                        vertical-stretch: 1;
+                        background: root.c-card;
+                        border-width: 1px;
+                        border-color: root.c-border;
+                        border-radius: 15px;
+                        clip: true;
+
+                        if root.list-rows.length == 0 : Text {
+                            text: root.artist-section == 0 ? "Loading Top Songs..." : (root.artist-section == 1 ? "No Albums listed" : "No Singles listed");
+                            color: root.c-muted;
+                            font-size: 12px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        for tr[idx] in root.list-rows : Rectangle {
+                            property <bool> sel: !root.detail-top-focused && root.list-index == idx;
+                            x: 0px;
+                            y: (idx - root.list-scroll) * 48px;
+                            width: parent.width;
+                            height: 48px;
+                            visible: idx >= root.list-scroll && (idx - root.list-scroll) < 5;
+                            background: sel ? root.c-card2 : transparent;
+
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 10px;
+                                if root.artist-section == 0 : Text {
+                                    width: 20px;
+                                    text: (idx + 1);
+                                    color: sel ? root.c-accent : root.c-muted;
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                                if root.artist-section != 0 : Rectangle {
+                                    width: 34px;
+                                    height: 34px;
+                                    y: 7px;
+                                    border-radius: 7px;
+                                    background: root.detail-accent;
+                                    clip: true;
+                                    if tr.has_thumb : Image {
+                                        width: 34px;
+                                        height: 34px;
+                                        source: tr.thumb;
+                                        image-fit: cover;
+                                    }
+                                    if !tr.has_thumb : Text {
+                                        text: "LP";
+                                        color: #ffffff;
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    spacing: 1px;
+                                    MarqueeText {
+                                        text: (tr.is_playing ? "▶ " : "") + tr.title;
+                                        text-color: sel ? root.c-accent : root.c-text;
+                                        font-size: 12px;
+                                        font-weight: 700;
+                                        active: sel;
+                                    }
+                                    MarqueeText {
+                                        text: tr.album == "" ? tr.artist : (tr.artist + " · " + tr.album);
+                                        text-color: root.c-muted;
+                                        font-size: 10px;
+                                        font-weight: 600;
+                                        active: sel;
+                                    }
+                                }
+                                if root.artist-section == 0 : Text {
+                                    text: tr.is_favorite ? "♥" : "♡";
+                                    color: tr.is_favorite ? root.c-heart : root.c-muted;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                                if root.artist-section == 0 : Text {
+                                    text: tr.is_offline ? "✓" : "↓";
+                                    color: tr.is_offline ? root.c-ok : root.c-muted;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: root.artist-section == 0 ? tr.duration : "Open ↗";
+                                    color: root.artist-section == 0 ? root.c-muted : root.c-accent;
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            Rectangle {
+                                x: 0px;
+                                y: 47px;
+                                width: parent.width;
+                                height: 1px;
+                                background: root.c-border;
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 16px;
+                        Text {
+                            text: root.artist-section == 0 ? "A: Play · X: ♥ Track · Y: ↓ DL · ▲ Top: DL All" : "A: Open Release · X: ♥ Artist · R-Stick: Page";
+                            color: root.c-muted;
+                            font-size: 10px;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text {
+                            text: "◀/▶ Section · B: Back";
+                            color: root.c-accent;
+                            font-size: 10px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                // -------------------------------------------------------------
+                // 5. LIBRARY (FAVORITES | PLAYLISTS | HISTORY | DOWNLOADS)
+                // -------------------------------------------------------------
+                if root.active-tab == "lib" : VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+
+                    HorizontalLayout {
+                        height: 32px;
+                        spacing: 6px;
+                        for m in [
+                            { id: "favs", label: "♥ Favs" },
+                            { id: "playlists", label: "Playlists" },
+                            { id: "history", label: "History" },
+                            { id: "downloads", label: "↓ Downloads" },
+                        ] : Rectangle {
+                            width: m-lbl.preferred-width + 18px;
+                            border-radius: 10px;
+                            border-width: 1px;
+                            border-color: root.lib-mode == m.id ? root.c-accent : root.c-border;
+                            background: root.lib-mode == m.id ? root.c-accent : root.c-card;
+                            m-lbl := Text {
+                                text: m.label;
+                                color: root.lib-mode == m.id ? root.c-accent-fg : root.c-text;
+                                font-size: 11px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        if root.lib-filter != "" : Rectangle {
+                            width: lf-t.preferred-width + 14px;
+                            border-radius: 8px;
+                            background: root.c-card2;
+                            border-width: 1px;
+                            border-color: root.c-accent;
+                            lf-t := Text {
+                                text: "⌕ " + root.lib-filter;
+                                color: root.c-accent;
+                                font-size: 10px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        if root.lib-mode == "downloads" : Rectangle {
+                            width: clr-t.preferred-width + 14px;
+                            border-radius: 8px;
+                            border-width: 1px;
+                            border-color: root.detail-top-focused ? root.c-heart : root.c-border;
+                            background: root.detail-top-focused ? root.c-heart : root.c-card;
+                            clr-t := Text {
+                                text: root.lib-downloads-info == "" ? "🗑 Clear All" : ("🗑 " + root.lib-downloads-info);
+                                color: root.detail-top-focused ? #ffffff : root.c-text;
+                                font-size: 10px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        if root.lib-mode != "downloads" : Text {
+                            text: "R3: Filter · R-Stk ◀▶ Tabs";
+                            color: root.c-muted;
+                            font-size: 10px;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    if root.lib-mode == "playlists" : HorizontalLayout {
+                        vertical-stretch: 1;
+                        spacing: 10px;
+
+                        // Left Playlists Rail
+                        Rectangle {
+                            width: 184px;
+                            background: root.c-card;
+                            border-width: 1px;
+                            border-color: root.lib-focus-playlists ? root.c-accent : root.c-border;
+                            border-radius: 14px;
+                            clip: true;
+
+                            VerticalLayout {
+                                padding: 8px;
+                                spacing: 6px;
+                                for pl[pi] in root.playlists : Rectangle {
+                                    height: 36px;
+                                    border-radius: 10px;
+                                    background: root.playlist-index == pi ? root.c-accent : transparent;
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        padding-right: 10px;
+                                        Text {
+                                            text: pl.name;
+                                            color: root.playlist-index == pi ? root.c-accent-fg : root.c-text;
+                                            font-size: 12px;
+                                            font-weight: 700;
+                                            overflow: elide;
+                                            horizontal-stretch: 1;
+                                            vertical-alignment: center;
+                                        }
+                                        Text {
+                                            text: pl.count_label;
+                                            color: root.playlist-index == pi ? root.c-accent-fg : root.c-muted;
+                                            font-size: 11px;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Right Playlist Tracks
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            background: root.c-card;
+                            border-width: 1px;
+                            border-color: !root.lib-focus-playlists ? root.c-accent : root.c-border;
+                            border-radius: 14px;
+                            clip: true;
+
+                            if root.list-rows.length == 0 : Text {
+                                text: "Playlist empty.\nPress START on any song to add it!";
+                                color: root.c-muted;
+                                font-size: 12px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            for tr[idx] in root.list-rows : Rectangle {
+                                property <bool> sel: !root.lib-focus-playlists && root.list-index == idx;
+                                x: 0px;
+                                y: (idx - root.list-scroll) * 50px;
+                                width: parent.width;
+                                height: 50px;
+                                visible: idx >= root.list-scroll && (idx - root.list-scroll) < 6;
+                                background: sel ? root.c-card2 : transparent;
+
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    spacing: 8px;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        alignment: center;
+                                        MarqueeText {
+                                            text: tr.title;
+                                            text-color: sel ? root.c-accent : root.c-text;
+                                            font-size: 12px;
+                                            font-weight: 700;
+                                            active: sel;
+                                        }
+                                        Text {
+                                            text: tr.artist;
+                                            color: root.c-muted;
+                                            font-size: 11px;
+                                            overflow: elide;
+                                        }
+                                    }
+                                    Text {
+                                        text: tr.is_offline ? "✓" : tr.duration;
+                                        color: tr.is_offline ? root.c-ok : root.c-muted;
+                                        font-size: 11px;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                Rectangle {
+                                    x: 0px;
+                                    y: 49px;
+                                    width: parent.width;
+                                    height: 1px;
+                                    background: root.c-border;
+                                }
+                            }
+                        }
+                    }
+
+                    if root.lib-mode != "playlists" : Rectangle {
+                        vertical-stretch: 1;
+                        background: root.c-card;
+                        border-width: 1px;
+                        border-color: root.c-border;
+                        border-radius: 16px;
+                        clip: true;
+
+                        if root.list-rows.length == 0 : Text {
+                            text: root.lib-filter != ""
+                                ? "No tracks match \"" + root.lib-filter + "\" (R3 to edit filter)"
+                                : (root.lib-mode == "favs"
+                                    ? "No favorites yet. Press X on any track!"
+                                    : (root.lib-mode == "history"
+                                        ? "No playback history yet. Play a song to record it!"
+                                        : "No downloads yet. Press Y on any track!"));
+                            color: root.c-muted;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        for tr[idx] in root.list-rows : Rectangle {
+                            property <bool> sel: !root.detail-top-focused && root.list-index == idx;
+                            x: 0px;
+                            y: (idx - root.list-scroll) * 50px;
+                            width: parent.width;
+                            height: 50px;
+                            visible: idx >= root.list-scroll && (idx - root.list-scroll) < 6;
+                            background: sel ? root.c-card2 : transparent;
+
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                spacing: 10px;
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    MarqueeText {
+                                        text: tr.title;
+                                        text-color: sel ? root.c-accent : root.c-text;
+                                        font-size: 13px;
+                                        font-weight: 700;
+                                        active: sel;
+                                    }
+                                    MarqueeText {
+                                        text: tr.artist + (tr.album == "" ? "" : (" · " + tr.album));
+                                        text-color: root.c-muted;
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                        active: sel;
+                                    }
+                                }
+                                Text {
+                                    text: tr.is_favorite ? "♥" : "♡";
+                                    color: tr.is_favorite ? root.c-heart : root.c-muted;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: tr.is_offline ? "✓" : "↓";
+                                    color: tr.is_offline ? root.c-ok : root.c-muted;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: tr.duration;
+                                    color: root.c-muted;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            Rectangle {
+                                x: 0px;
+                                y: 49px;
+                                width: parent.width;
+                                height: 1px;
+                                background: root.c-border;
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: root.lib-mode == "downloads"
+                            ? "A: Play · X: Fav · Y: 🗑 Delete · ▲ Top: Clear All · R3: Filter · R-Stk ◀▶: Tab"
+                            : "A: Play · X: Fav · Y: DL · START: +List · R3: Filter · R-Stk ◀▶: Tab";
+                        color: root.c-muted;
+                        font-size: 10px;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                // -------------------------------------------------------------
+                // 6. FIND (SEARCH BAR TOP -> SUGGESTIONS/HITS MIDDLE -> SPACIOUS QWERTY BOTTOM)
+                // -------------------------------------------------------------
+                if root.active-tab == "find" : VerticalLayout {
+                    padding: 14px;
+                    spacing: 8px;
+
+                    // Search Bar
+                    Rectangle {
+                        height: 36px;
+                        background: root.c-card;
+                        border-width: 1px;
+                        border-color: root.c-accent;
+                        border-radius: 10px;
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 8px;
+                            Path {
+                                width: 14px;
+                                height: 14px;
+                                y: 11px;
+                                viewbox-x: 0; viewbox-y: 0; viewbox-width: 24; viewbox-height: 24;
+                                commands: "M11 4a7 7 0 1 0 0 14 7 7 0 1 0 0-14z M21 21l-4.35-4.35";
+                                stroke: root.c-accent;
+                                stroke-width: 2.2px;
+                            }
+                            Text {
+                                text: root.search-query == "" ? "Type below or use Phone Remote..." : (root.search-query + "_");
+                                color: root.search-query == "" ? root.c-muted : root.c-text;
+                                font-size: 13px;
+                                font-weight: 700;
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: root.web-server-on && root.web-pin-label != "OFF" && root.web-pin-label != ""
+                                    ? (root.remote-url + "  ·  PIN " + root.web-pin-label)
+                                    : root.remote-url;
+                                color: root.c-muted;
+                                font-size: 10px;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    // Autocomplete Suggestion Chips
+                    HorizontalLayout {
+                        height: 28px;
+                        spacing: 6px;
+                        Text {
+                            text: root.search-query == "" ? "RECENT:" : "SUGGEST:";
+                            color: root.c-accent;
+                            font-size: 11px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        for chip[ci] in root.suggest-chips : Rectangle {
+                            visible: ci < 4;
+                            width: ch-t.preferred-width + 18px;
+                            border-radius: 14px;
+                            border-width: 1px;
+                            border-color: (root.find-zone == 0 && root.chip-index == ci) ? root.c-accent : root.c-border;
+                            background: (root.find-zone == 0 && root.chip-index == ci) ? root.c-accent : root.c-card;
+                            ch-t := Text {
+                                text: chip;
+                                color: (root.find-zone == 0 && root.chip-index == ci) ? root.c-accent-fg : root.c-text;
+                                font-size: 11px;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    // Live Results: 2 compact rows while typing, expands to 6 scrollable rows when browsing Hits (find-zone == 1)
+                    Rectangle {
+                        height: root.find-zone == 1 ? 268px : 82px;
+                        vertical-stretch: root.find-zone == 1 ? 1 : 0;
+                        background: root.c-card;
+                        border-width: 1px;
+                        border-color: root.find-zone == 1 ? root.c-accent : root.c-border;
+                        border-radius: 12px;
+                        clip: true;
+
+                        if root.find-hits.length == 0 : Text {
+                            text: root.search-query == "" ? "Start typing below or press GO to search YouTube Music..." : "Press GO on keyboard to search YouTube Music";
+                            color: root.c-muted;
+                            font-size: 12px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        for tr[hi] in root.find-hits : Rectangle {
+                            property <bool> sel: (root.find-zone == 1 && root.find-hit-index == hi);
+                            property <int> max-vis: root.find-zone == 1 ? 6 : 2;
+                            visible: hi >= root.find-hit-scroll && (hi - root.find-hit-scroll) < max-vis;
+                            x: 0px;
+                            y: (hi - root.find-hit-scroll) * 44px;
+                            width: parent.width;
+                            height: 44px;
+                            background: sel ? root.c-card2 : transparent;
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 8px;
+                                if tr.kind != "" : Rectangle {
+                                    width: k-badge.preferred-width + 12px;
+                                    height: 20px;
+                                    y: 12px;
+                                    border-radius: 6px;
+                                    background: tr.kind == "ARTIST" ? root.c-accent : root.c-card2;
+                                    border-width: 1px;
+                                    border-color: root.c-border;
+                                    k-badge := Text {
+                                        text: tr.kind;
+                                        color: tr.kind == "ARTIST" ? root.c-accent-fg : root.c-accent;
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    spacing: 1px;
+                                    MarqueeText {
+                                        text: tr.kind == "" ? ("▶ " + tr.title) : tr.title;
+                                        text-color: sel ? root.c-accent : root.c-text;
+                                        font-size: 12px;
+                                        font-weight: 700;
+                                        active: sel;
+                                    }
+                                    if tr.artist != "" : MarqueeText {
+                                        text: tr.album == "" ? tr.artist : (tr.artist + " · " + tr.album);
+                                        text-color: root.c-muted;
+                                        font-size: 10px;
+                                        font-weight: 600;
+                                        active: sel;
+                                    }
+                                }
+                                if !tr.is_artist : Text {
+                                    text: tr.is_favorite ? "♥" : "♡";
+                                    color: tr.is_favorite ? root.c-heart : root.c-muted;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                }
+                                if !tr.is_artist : Text {
+                                    text: tr.is_offline ? "✓" : "↓";
+                                    color: tr.is_offline ? root.c-ok : root.c-muted;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: tr.is_artist ? "Open ↗" : tr.duration;
+                                    color: tr.is_artist ? root.c-accent : root.c-muted;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            Rectangle {
+                                x: 0px;
+                                y: 43px;
+                                width: parent.width;
+                                height: 1px;
+                                background: root.c-border;
+                            }
+                        }
+                    }
+
+                    if root.find-zone == 1 : Text {
+                        height: 20px;
+                        text: "A: Open / Play   ·   R-Stick: Page   ·   B: Keyboard   ·   X: Fav   ·   Y: DL";
+                        color: root.c-muted;
+                        font-size: 11px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    // Spacious Standard QWERTY / 123 Keyboard at Bottom (hides automatically when scrolling Hits!)
+                    if root.find-zone != 1 : Rectangle {
+                        vertical-stretch: 1;
+                        background: root.c-card;
+                        border-width: 1px;
+                        border-color: root.c-border;
+                        border-radius: 16px;
+
+                        VerticalLayout {
+                            padding: 10px;
+                            spacing: 6px;
+                            for r in [0, 1, 2] : HorizontalLayout {
+                                spacing: 5px;
+                                vertical-stretch: 1;
+                                for c in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] : Rectangle {
+                                    property <string> k-txt: (root.kbd-num-mode ? root.num-keys[r * 10 + c] : root.qwerty-keys[r * 10 + c]);
+                                    property <bool> cur: (root.find-zone == 2 && root.key-row == r && root.key-col == c);
+                                    horizontal-stretch: 1;
+                                    border-radius: 10px;
+                                    border-width: 1px;
+                                    border-color: cur ? root.c-accent : root.c-border;
+                                    background: cur ? root.c-accent : (k-txt == "GO" ? root.c-accent : (k-txt == "DEL" ? root.c-heart : root.c-card2));
+                                    Text {
+                                        text: k-txt;
+                                        color: (cur || k-txt == "GO") ? root.c-accent-fg : (k-txt == "DEL" ? #ffffff : root.c-text);
+                                        font-size: 13px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // =================================================================
+            // BOTTOM-PINNED THUMB DOCK (56px) WITH PROGRESS HAIRLINE + BATTERY
+            // =================================================================
+            Rectangle {
+                height: 56px;
+                width: 640px;
+                background: root.c-dock;
+
+                VerticalLayout {
+                    spacing: 0px;
+                    // 4px Progress Hairline
+                    Rectangle {
+                        height: 4px;
+                        background: root.c-card2;
+                        Rectangle {
+                            x: 0px;
+                            y: 0px;
+                            height: 4px;
+                            width: parent.width * max(0.0, min(1.0, root.now-progress));
+                            background: root.c-accent;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 16px;
+                        padding-right: 16px;
+                        spacing: 8px;
+                        vertical-stretch: 1;
+
+                        // Now
+                        Rectangle {
+                            property <bool> on: root.dock-tab == "now";
+                            width: 78px;
+                            height: 30px;
+                            y: 11px;
+                            border-radius: 15px;
+                            background: on ? root.c-accent : transparent;
+                            HorizontalLayout {
+                                alignment: center;
+                                spacing: 5px;
+                                Rectangle {
+                                    width: 14px; height: 30px;
+                                    Path {
+                                        x: 0px; y: 8px; width: 14px; height: 14px;
+                                        viewbox-x: 0; viewbox-y: 0; viewbox-width: 24; viewbox-height: 24;
+                                        commands: "M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18z M10 8l6 4-6 4z";
+                                        stroke: on ? root.c-accent-fg : root.c-muted;
+                                        stroke-width: 2px;
+                                    }
+                                }
+                                Text {
+                                    text: "Now";
+                                    color: on ? root.c-accent-fg : root.c-muted;
+                                    font-size: 12px; font-weight: 700; vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Vibes
+                        Rectangle {
+                            property <bool> on: root.dock-tab == "vibes";
+                            width: 84px;
+                            height: 30px;
+                            y: 11px;
+                            border-radius: 15px;
+                            background: on ? root.c-accent : transparent;
+                            HorizontalLayout {
+                                alignment: center;
+                                spacing: 5px;
+                                Rectangle {
+                                    width: 14px; height: 30px;
+                                    Path {
+                                        x: 0px; y: 8px; width: 14px; height: 14px;
+                                        viewbox-x: 0; viewbox-y: 0; viewbox-width: 24; viewbox-height: 24;
+                                        commands: "M9 18V5l12-2v13 M6 15a3 3 0 1 0 0 6 3 3 0 1 0 0-6z M18 13a3 3 0 1 0 0 6 3 3 0 1 0 0-6z";
+                                        stroke: on ? root.c-accent-fg : root.c-muted;
+                                        stroke-width: 2px;
+                                    }
+                                }
+                                Text {
+                                    text: "Vibes";
+                                    color: on ? root.c-accent-fg : root.c-muted;
+                                    font-size: 12px; font-weight: 700; vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Artists
+                        Rectangle {
+                            property <bool> on: root.dock-tab == "artists";
+                            width: 90px;
+                            height: 30px;
+                            y: 11px;
+                            border-radius: 15px;
+                            background: on ? root.c-accent : transparent;
+                            HorizontalLayout {
+                                alignment: center;
+                                spacing: 5px;
+                                Rectangle {
+                                    width: 14px; height: 30px;
+                                    Path {
+                                        x: 0px; y: 8px; width: 14px; height: 14px;
+                                        viewbox-x: 0; viewbox-y: 0; viewbox-width: 24; viewbox-height: 24;
+                                        commands: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 3a4 4 0 1 0 0 8 4 4 0 1 0 0-8z";
+                                        stroke: on ? root.c-accent-fg : root.c-muted;
+                                        stroke-width: 2px;
+                                    }
+                                }
+                                Text {
+                                    text: "Artists";
+                                    color: on ? root.c-accent-fg : root.c-muted;
+                                    font-size: 12px; font-weight: 700; vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Lib
+                        Rectangle {
+                            property <bool> on: root.dock-tab == "lib";
+                            width: 70px;
+                            height: 30px;
+                            y: 11px;
+                            border-radius: 15px;
+                            background: on ? root.c-accent : transparent;
+                            HorizontalLayout {
+                                alignment: center;
+                                spacing: 5px;
+                                Rectangle {
+                                    width: 14px; height: 30px;
+                                    Path {
+                                        x: 0px; y: 8px; width: 14px; height: 14px;
+                                        viewbox-x: 0; viewbox-y: 0; viewbox-width: 24; viewbox-height: 24;
+                                        commands: "M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20";
+                                        stroke: on ? root.c-accent-fg : root.c-muted;
+                                        stroke-width: 2px;
+                                    }
+                                }
+                                Text {
+                                    text: "Lib";
+                                    color: on ? root.c-accent-fg : root.c-muted;
+                                    font-size: 12px; font-weight: 700; vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Find
+                        Rectangle {
+                            property <bool> on: root.dock-tab == "find";
+                            width: 78px;
+                            height: 30px;
+                            y: 11px;
+                            border-radius: 15px;
+                            background: on ? root.c-accent : transparent;
+                            HorizontalLayout {
+                                alignment: center;
+                                spacing: 5px;
+                                Rectangle {
+                                    width: 14px; height: 30px;
+                                    Path {
+                                        x: 0px; y: 8px; width: 14px; height: 14px;
+                                        viewbox-x: 0; viewbox-y: 0; viewbox-width: 24; viewbox-height: 24;
+                                        commands: "M11 4a7 7 0 1 0 0 14 7 7 0 1 0 0-14z M21 21l-4.35-4.35";
+                                        stroke: on ? root.c-accent-fg : root.c-muted;
+                                        stroke-width: 2px;
+                                    }
+                                }
+                                Text {
+                                    text: "Find";
+                                    color: on ? root.c-accent-fg : root.c-muted;
+                                    font-size: 12px; font-weight: 700; vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        Rectangle { horizontal-stretch: 1; }
+
+                        // Aligned Battery Icon + Percentage
+                        HorizontalLayout {
+                            spacing: 6px;
+                            Rectangle {
+                                width: 18px;
+                                height: 52px;
+                                Path {
+                                    x: 0px;
+                                    y: 18px;
+                                    width: 18px;
+                                    height: 16px;
+                                    viewbox-x: 0; viewbox-y: 0; viewbox-width: 24; viewbox-height: 24;
+                                    commands: "M2 7h16v10H2z M21 10v4 M4.5 9.5h10v5h-10z";
+                                    stroke: root.c-ok;
+                                    stroke-width: 2px;
+                                }
+                            }
+                            Text {
+                                text: root.battery-label;
+                                color: root.c-text;
+                                font-size: 12px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // INLINE FILTER / SEARCH KEYBOARD FOR VIBES & ARTISTS (R2)
+        // =====================================================================
+        if root.grid-kbd-open : Rectangle {
+            width: 640px;
+            height: 480px;
+            background: #000000aa;
+
+            Rectangle {
+                x: 40px;
+                y: 94px;
+                width: 560px;
+                height: 292px;
+                background: root.c-card;
+                border-width: 1px;
+                border-color: root.c-accent;
+                border-radius: 16px;
+
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 7px;
+                    HorizontalLayout {
+                        Text {
+                            text: root.grid-kbd-title;
+                            color: root.c-accent;
+                            font-size: 12px;
+                            font-weight: 700;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text {
+                            text: "B: Close   ·   GO: Search YT Music";
+                            color: root.c-muted;
+                            font-size: 11px;
+                        }
+                    }
+                    Rectangle {
+                        height: 32px;
+                        background: root.c-dock;
+                        border-width: 1px;
+                        border-color: root.c-border;
+                        border-radius: 10px;
+                        Text {
+                            x: 12px;
+                            text: (root.active-tab == "vibes" ? root.vibe-filter : (root.active-tab == "lib" ? root.lib-filter : root.artist-filter)) + "_";
+                            color: root.c-text;
+                            font-size: 13px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                    if root.grid-kbd-previews.length > 0 : HorizontalLayout {
+                        height: 28px;
+                        spacing: 6px;
+                        for pv[pi] in root.grid-kbd-previews : Rectangle {
+                            visible: pi < 3;
+                            width: pv-t.preferred-width + 32px;
+                            border-radius: 10px;
+                            background: root.c-card2;
+                            border-width: 1px;
+                            border-color: root.c-border;
+                            HorizontalLayout {
+                                padding-left: 6px;
+                                padding-right: 8px;
+                                spacing: 6px;
+                                Rectangle {
+                                    width: 18px;
+                                    height: 18px;
+                                    y: 5px;
+                                    border-radius: 9px;
+                                    background: pv.accent;
+                                    clip: true;
+                                    if pv.has_thumb : Image {
+                                        width: 18px;
+                                        height: 18px;
+                                        source: pv.thumb;
+                                        image-fit: cover;
+                                    }
+                                    if !pv.has_thumb : Text {
+                                        text: pv.initial;
+                                        color: #ffffff;
+                                        font-size: 9px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                pv-t := Text {
+                                    text: pv.title;
+                                    color: root.c-text;
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                    VerticalLayout {
+                        vertical-stretch: 1;
+                        spacing: 5px;
+                        for r in [0, 1, 2] : HorizontalLayout {
+                            spacing: 5px;
+                            vertical-stretch: 1;
+                            for c in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] : Rectangle {
+                                property <string> k-txt: (root.kbd-num-mode ? root.num-keys[r * 10 + c] : root.qwerty-keys[r * 10 + c]);
+                                property <bool> cur: (root.key-row == r && root.key-col == c);
+                                horizontal-stretch: 1;
+                                border-radius: 8px;
+                                border-width: 1px;
+                                border-color: cur ? root.c-accent : root.c-border;
+                                background: cur ? root.c-accent : (k-txt == "GO" ? root.c-accent : (k-txt == "DEL" ? root.c-heart : root.c-card2));
+                                Text {
+                                    text: k-txt;
+                                    color: (cur || k-txt == "GO") ? root.c-accent-fg : (k-txt == "DEL" ? #ffffff : root.c-text);
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // ADD TO PLAYLIST MODAL (START)
+        // =====================================================================
+        if root.pl-modal-open : Rectangle {
+            width: 640px;
+            height: 480px;
+            background: #000000aa;
+
+            Rectangle {
+                x: 160px;
+                y: 110px;
+                width: 320px;
+                height: 260px;
+                background: root.c-card;
+                border-width: 1px;
+                border-color: root.c-accent;
+                border-radius: 16px;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 8px;
+                    HorizontalLayout {
+                        Text {
+                            text: "ADD TO PLAYLIST";
+                            color: root.c-accent;
+                            font-size: 12px;
+                            font-weight: 700;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text {
+                            text: "B / SEL: Close";
+                            color: root.c-muted;
+                            font-size: 11px;
+                        }
+                    }
+                    for pl[pi] in root.playlists : Rectangle {
+                        height: 36px;
+                        border-radius: 10px;
+                        border-width: 1px;
+                        border-color: root.pl-modal-index == pi ? root.c-accent : root.c-border;
+                        background: root.pl-modal-index == pi ? root.c-card2 : root.c-dock;
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            Text {
+                                text: pl.name + " (" + pl.count_label + ")";
+                                color: root.c-text;
+                                font-size: 12px;
+                                font-weight: 700;
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: pl.contains_target ? "✓ Added" : "+ Add";
+                                color: pl.contains_target ? root.c-ok : root.c-muted;
+                                font-size: 12px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                    Rectangle {
+                        height: 36px;
+                        border-radius: 10px;
+                        border-width: 1px;
+                        border-color: root.pl-modal-index == root.playlists.length ? root.c-accent : root.c-border;
+                        background: root.pl-modal-index == root.playlists.length ? root.c-card2 : transparent;
+                        Text {
+                            x: 12px;
+                            text: "+ New Playlist";
+                            color: root.c-text;
+                            font-size: 12px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // QUICK SETTINGS MODAL (L2)
+        // =====================================================================
+        if root.settings-open : Rectangle {
+            width: 640px;
+            height: 480px;
+            background: #000000aa;
+
+            Rectangle {
+                x: 150px;
+                y: 52px;
+                width: 340px;
+                height: 376px;
+                background: root.c-card;
+                border-width: 1px;
+                border-color: root.c-accent;
+                border-radius: 16px;
+
+                VerticalLayout {
+                    padding: 18px;
+                    spacing: 8px;
+                    HorizontalLayout {
+                        Text {
+                            text: "SETTINGS";
+                            color: root.c-accent;
+                            font-size: 12px;
+                            font-weight: 700;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text {
+                            text: "B / SEL: Close";
+                            color: root.c-muted;
+                            font-size: 11px;
+                        }
+                    }
+                    for opt[i] in [
+                        { label: "Theme", val: root.theme-label },
+                        { label: "Loop Current Song", val: root.loop-track ? "ON" : "OFF" },
+                        { label: "Radio Autoplay", val: root.radio-autoplay ? "ON" : "OFF" },
+                        { label: "Swap A / B", val: root.swap-ab ? "ON" : "OFF" },
+                        { label: "Local Web Server", val: root.web-server-on ? root.remote-url : "OFF" },
+                        { label: "Web Security PIN (X: New)", val: root.web-pin-label },
+                        { label: "Quit App", val: "" },
+                    ] : Rectangle {
+                        height: 38px;
+                        border-radius: 10px;
+                        border-width: 1px;
+                        border-color: root.settings-index == i ? root.c-accent : root.c-border;
+                        background: root.settings-index == i ? root.c-card2 : root.c-dock;
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            Text {
+                                text: opt.label;
+                                color: root.c-text;
+                                font-size: 13px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            Text {
+                                text: opt.val;
+                                color: root.c-accent;
+                                font-size: 12px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // CONFIRMATION MODAL (BATCH DOWNLOAD / CLEAR DOWNLOADS)
+        // =====================================================================
+        if root.confirm-open : Rectangle {
+            width: 640px;
+            height: 480px;
+            background: #000000b8;
+
+            Rectangle {
+                x: 140px;
+                y: 145px;
+                width: 360px;
+                height: 170px;
+                background: root.c-card;
+                border-width: 1.5px;
+                border-color: root.c-accent;
+                border-radius: 16px;
+
+                VerticalLayout {
+                    padding: 18px;
+                    spacing: 10px;
+                    Text {
+                        text: root.confirm-title;
+                        color: root.c-accent;
+                        font-size: 13px;
+                        font-weight: 700;
+                    }
+                    Text {
+                        text: root.confirm-body;
+                        color: root.c-text;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                        vertical-stretch: 1;
+                    }
+                    HorizontalLayout {
+                        spacing: 10px;
+                        height: 34px;
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 10px;
+                            background: root.c-accent;
+                            Text {
+                                text: "A: " + root.confirm-yes-label;
+                                color: root.c-accent-fg;
+                                font-size: 12px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 10px;
+                            border-width: 1px;
+                            border-color: root.c-border;
+                            background: root.c-card2;
+                            Text {
+                                text: "B: Cancel";
+                                color: root.c-text;
+                                font-size: 12px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // TOAST
+        if root.toast-text != "" && !root.pocket-lock : Rectangle {
+            x: 376px;
+            y: 12px;
+            width: 248px;
+            height: 30px;
+            border-radius: 15px;
+            background: root.c-card2;
+            border-width: 1px;
+            border-color: root.c-accent;
+            Text {
+                text: root.toast-text;
+                color: root.c-text;
+                font-size: 11px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        // POCKET LOCK (SELECT)
+        if root.pocket-lock : Rectangle {
+            width: 640px;
+            height: 480px;
+            background: #000000;
+            VerticalLayout {
+                padding: 40px;
+                spacing: 14px;
+                alignment: center;
+                Text {
+                    text: "POCKET LOCK ACTIVE";
+                    color: #52525b;
+                    font-size: 11px;
+                    font-weight: 700;
+                    letter-spacing: 2px;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: root.now-title;
+                    color: #a1a1aa;
+                    font-size: 18px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.now-artist;
+                    color: #71717a;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                }
+                Rectangle {
+                    height: 6px;
+                    width: 300px;
+                    x: 130px;
+                    border-radius: 3px;
+                    background: #18181b;
+                    Rectangle {
+                        x: 0px;
+                        y: 0px;
+                        height: 6px;
+                        border-radius: 3px;
+                        width: 300px * max(0.0, min(1.0, root.now-progress));
+                        background: #52525b;
+                    }
+                }
+                Text {
+                    text: root.now-elapsed + " / " + root.now-duration + "   ·   Press L3 or START to unlock";
+                    color: #52525b;
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,35 @@
+{
+  "version": 4,
+  "name": "rusttune.zip",
+  "items": [
+    "RustTune.sh",
+    "rusttune"
+  ],
+  "items_opt": null,
+  "attr": {
+    "title": "RustTune",
+    "porter": [
+      "dfrost16"
+    ],
+    "desc": "Native Rust + Slint audio-only YouTube Music player for RG35XX H / ROCKNIX.",
+    "desc_md": "An audio-only, gamepad-first YouTube Music player built with Rust + Slint. Features search, Up Next radio, synced lyrics, offline M4A caching, dynamic album accent themes, Pocket Lock mode, and a local Web UI secured by a 6-digit pairing PIN.",
+    "inst": "Ready to run. Connect to Wi-Fi to stream, import playlists, or cache tracks offline.",
+    "inst_md": "Ready to run. Connect to Wi-Fi to stream or cache tracks offline. Open the local Web UI URL and 6-digit PIN shown in Find or Settings from your phone or PC.",
+    "genres": [
+      "other"
+    ],
+    "image": {
+      "screenshot": "cover.png"
+    },
+    "rtr": true,
+    "exp": false,
+    "runtime": [],
+    "store": [],
+    "availability": "free",
+    "reqs": [],
+    "arch": [
+      "aarch64"
+    ],
+    "min_glibc": "2.36"
+  }
+}

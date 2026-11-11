@@ -1,0 +1,11 @@
+ytmusic-rs/target/
+webapp/node_modules/
+webapp/dist/
+dist/
+port/rusttune
+port/ytmusic-hh
+port/data/
+port/cache/
+port/log.txt
+*.rs.bk
+__pycache__/

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<gameList>
+  <game>
+    <path>./RustTune.sh</path>
+    <name>RustTune</name>
+    <desc>Native audio-only YouTube Music player for RG35XX H / ROCKNIX with offline M4A caching, synced lyrics, Pocket Lock, and a local PIN-protected Web UI.</desc>
+    <image>./rusttune/cover.png</image>
+    <genre>Music</genre>
+  </game>
+</gameList>

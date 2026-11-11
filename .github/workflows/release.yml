@@ -1,0 +1,74 @@
+name: Build & Release RustTune
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Build Svelte 5 Web UI
+        working-directory: webapp
+        run: |
+          npm ci
+          npm run build
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Cache Cargo registry & build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ytmusic-rs
+
+      - name: Run unit tests
+        working-directory: ytmusic-rs
+        run: cargo test
+
+      - name: Install Zig & cargo-zigbuild
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.0
+
+      - name: Install cargo-zigbuild
+        uses: taiki-e/install-action@cargo-zigbuild
+
+      - name: Cross-compile for RG35XX H (aarch64 glibc 2.36)
+        working-directory: ytmusic-rs
+        run: cargo zigbuild --release --target aarch64-unknown-linux-gnu.2.36
+
+      - name: Package PortMaster zip
+        run: python3 build_port.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rusttune-portmaster
+          path: dist/rusttune.zip
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/rusttune.zip
+          generate_release_notes: true
