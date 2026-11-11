@@ -399,7 +399,11 @@ fn main() {
 
     let win = YtMusicWindow::new().expect("Slint window creation failed");
     state.sync_ui(&win);
-    sdl.render_if_needed(true);
+    if sdl.render_if_needed(true) {
+        if let Some(ref r) = state.remote {
+            *r.frame_rgb565.lock().unwrap() = sdl.copy_rgb565();
+        }
+    }
 
     while !sdl.should_quit {
         let wait_ms = if state.is_playing { 16 } else { 40 };
@@ -409,6 +413,13 @@ fn main() {
         }
         state.poll_background(&mut sdl);
         state.sync_ui(&win);
-        sdl.render_if_needed(false);
+        let drew = sdl.render_if_needed(false);
+        if let Some(ref r) = state.remote {
+            if let Ok(mut fb) = r.frame_rgb565.try_lock() {
+                if drew || fb.is_empty() {
+                    *fb = sdl.copy_rgb565();
+                }
+            }
+        }
     }
 }

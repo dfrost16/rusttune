@@ -385,6 +385,34 @@ export function createDeckStore() {
     toast('Local web server turned off (re-enable in handheld Settings)');
   }
 
+  async function downloadScreenshot() {
+    try {
+      const tok = getStoredToken();
+      const res = await fetch('/api/screenshot.png', {
+        credentials: 'same-origin',
+        headers: tok ? { Authorization: `Bearer ${tok}` } : {}
+      });
+      if (res.status === 401) {
+        authRequired = true;
+        return;
+      }
+      if (!res.ok) throw new Error('Screenshot unavailable');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      a.href = url;
+      a.download = `rusttune-${stamp}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast('Saved 640x480 handheld screenshot');
+    } catch (e) {
+      toast(`Screenshot failed: ${e.message}`);
+    }
+  }
+
   function init() {
     checkAuth().then(() => {
       if (!authRequired) {
@@ -457,6 +485,7 @@ export function createDeckStore() {
     toggleSelected,
     selectAllVisible,
     stopServer,
+    downloadScreenshot,
     triggerPwaInstall
   };
 }
