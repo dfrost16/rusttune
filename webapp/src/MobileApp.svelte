@@ -347,9 +347,6 @@
       <div class="ios-head">
         <h1>Now</h1>
         <div style="display:flex;gap:7px;">
-          <button class="ios-btn sec sm" aria-label="Capture handheld screenshot" onclick={() => deck.downloadScreenshot()}>
-            <SfIcon name="camera" size={14} />
-          </button>
           <button class="ios-btn sec sm" onclick={cycleTheme}>
             {phoneTheme === 'amoled' ? 'AMOLED' : phoneTheme === 'light' ? 'Light' : 'Dark'}
           </button>

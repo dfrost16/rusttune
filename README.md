@@ -2,25 +2,46 @@
 
 An audio-only, gamepad-first YouTube Music player built with Rust and Slint for the **Anbernic RG35XX H** running **ROCKNIX** and **PortMaster** (640x480). Ships as a single self-contained `aarch64` binary with pure-Rust AAC decoding (`symphonia`), embedded Svelte 5 + Vite Web UI, and zero bundled FFmpeg or mpv libraries.
 
-> **Hardware Support Note:** Built and tested on ROCKNIX with an Anbernic RG35XX H. Currently I only have an RG35XX H with me, so I will not be able to test it on other handhelds.
+> **Hardware Support Note:** Working on ROCKNIX with an RG35XX H. Currently I only have an RG35XX H with me, so I will not be able to test it out on other handhelds.
 >
-> **AI / LLM Disclosure:** LLMs were used to varying degrees for the development of this project.
+> **AI / LLM Disclosure:** LLMs were used to varying degrees for this project.
 >
-> **License:** MIT No Attribution (`MIT-0`), Copyright 2026 `dfrost16`. You are allowed to fork, distribute, and modify this code without attribution.
+> **License:** You are allowed to fork, distribute, and modify this code without attribution (`MIT-0`, Copyright 2026 `dfrost16`).
 
 ## Features
 
-- **Handheld Studio UI (640x480):** Bottom dock (`Now`, `Vibes`, `Artists`, `Lib`, `Find`) with battery readout, Studio Dark and Studio Light themes, and slow readable marquee text.
-- **Now Playing + Dynamic Cover Theme:** Extracts the dominant vibrant hue from each track's album art using a 12-bucket hue histogram and adapts UI contrast cleanly across light and dark modes.
-- **Synced Lyrics & Up Next Radio:** 3-line time-synced lyrics via LRCLIB with YouTube Music plain lyrics fallback, plus automatic Up Next radio queue and song looping (`R3`).
-- **Vibes & Lazy-Loaded Artists:** 3x2 genre/mood grid and paginated Artists directory with on-demand thumbnail loading, circular/rounded RGBA image masks, and Top Songs / Albums / Singles views.
-- **Library (`Favs`, `Playlists`, `History`, `Downloads`):** Browse favorites, playlists, recently played history (last 100 tracks), and locally cached `.m4a` files. Includes `R3` library filtering, batch download confirmation prompts, single file removal (`Y`), and clear-all downloads.
-- **Full Search Keyboard:** Bottom QWERTY keyboard with `123` number/symbol toggle (`R3` or `123` key), live search autocomplete chips, and direct YouTube/YTM URL support.
-- **Pocket Lock (`L3`):** Pure black screen mode to save power in your pocket while audio keeps playing.
-- **Local Web UI + 6-Digit PIN Security:** Built-in multi-threaded HTTP server (`0.0.0.0:8080`) serving two tailored layouts from the binary:
-  - **Desktop (Command Workbench):** `Ctrl+K` URL/filter bar, YouTube playlist URL preview and importer, multi-select batch `.m4a` deletion, orphaned cache cleanup, playlist CRUD (create, rename, delete), playback control, and JSON library backup export.
-  - **Phone (Apple HIG + AMOLED):** `#000000` AMOLED / Dark / Light themes, SF Symbols-style vector icons, YouTube playlist importer, playlist & offline storage deletion, and Home Screen support (`chrome://flags/#unsafely-treat-insecure-origin-as-secure` enables full PWA install on Android HTTP; iOS Safari supports Share -> Add to Home Screen).
-  - **6-Digit Pairing PIN & Server Toggle:** Generates a random 6-digit access code when the server starts, with Settings controls to toggle the Local Web Server ON/OFF, toggle the PIN ON/OFF, or rotate a new PIN (`X`).
+- **UI:** A clean beautiful UI made with RG35XX H in mind.
+- **Themes:** Dynamic theming based on cover art, plus Studio Dark and Studio Light modes (and `#000000` AMOLED mode on mobile web).
+- **Lyrics:** Support for time-synced 3-line lyrics via LRCLIB with YouTube Music plain lyrics fallback.
+- **Navigation:** Navigate your Library, history, or artists, or just enjoy music based on mood (Vibes).
+- **Pocket Lock:** A minimal black screen pocket mode (`L3`) to save battery while audio keeps playing.
+- **Web UI:** A polished local Web UI secured by a 6-digit pairing PIN to manage playlists, import YouTube playlists by URL, and delete offline `.m4a` files, optimised for both phone and desktop.
+
+## Screenshots
+
+### Handheld (640x480 RG35XX H)
+
+| Now Playing & Synced Lyrics | Vibes (Moods & Genres) |
+| :---: | :---: |
+| ![Now Playing](screenshot/now.png) | ![Vibes](screenshot/vibes.png) |
+
+| Artists Grid | Search Keyboard |
+| :---: | :---: |
+| ![Artists](screenshot/artist.png) | ![Search](screenshot/search.png) |
+
+| Playlists Modal | Settings & Security PIN |
+| :---: | :---: |
+| ![Playlist Modal](screenshot/playlist.png) | ![Settings](screenshot/settings.png) |
+
+### Local Web UI
+
+| Desktop Command Workbench |
+| :---: |
+| ![Desktop Web UI](screenshot/webuidesk.png) |
+
+| Phone Now Playing (AMOLED) | Phone Library | Phone YouTube Import | Phone Offline Files |
+| :---: | :---: | :---: | :---: |
+| ![Phone Now](screenshot/webphonenow.png) | ![Phone Library](screenshot/webphonelibrary.png) | ![Phone Import](screenshot/webphoneimport.png) | ![Phone Files](screenshot/webphonefile.png) |
 
 ## Controls (RG35XX H)
 

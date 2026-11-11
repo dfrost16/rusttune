@@ -69,9 +69,6 @@
     <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
   {:else if name === 'share'}
     <path d="M12 3v12m0-12-4 4m4-4 4 4" /><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
-  {:else if name === 'camera'}
-    <path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" />
-    <circle cx="12" cy="13" r="3.5" />
   {:else if name === 'close'}
     <path d="M6 6l12 12M18 6L6 18" />
   {/if}

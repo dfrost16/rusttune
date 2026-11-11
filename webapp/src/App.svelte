@@ -198,10 +198,6 @@
     </nav>
 
     <div class="wb-tools">
-      <button class="btn" title="Capture 640x480 handheld screenshot" onclick={() => deck.downloadScreenshot()}>
-        <SfIcon name="camera" size={13} />
-        Screenshot
-      </button>
       <button class="btn" onclick={() => (showNewPl = !showNewPl)}>
         <SfIcon name="plus" size={13} />
         New Playlist

@@ -152,7 +152,6 @@ impl Drop for ConnGuard {
 pub struct WebRemote {
     pub url: String,
     pub snapshot: Arc<Mutex<RemoteSnapshot>>,
-    pub frame_rgb565: Arc<Mutex<Vec<u16>>>,
     pub rx: mpsc::Receiver<RemoteCmd>,
     stop_flag: Arc<AtomicBool>,
     auth: Arc<Mutex<AuthState>>,
@@ -172,7 +171,6 @@ impl WebRemote {
 
         let ip = get_local_ip();
         let snapshot = Arc::new(Mutex::new(RemoteSnapshot::default()));
-        let frame_rgb565 = Arc::new(Mutex::new(Vec::<u16>::new()));
         let (tx, rx) = mpsc::sync_channel(64);
         let stop_flag = Arc::new(AtomicBool::new(false));
         let active_conns = Arc::new(AtomicUsize::new(0));
@@ -188,7 +186,6 @@ impl WebRemote {
 
         let stop_ref = stop_flag.clone();
         let snap_ref = snapshot.clone();
-        let frame_ref = frame_rgb565.clone();
         let auth_ref = auth.clone();
         let tx_ref = tx.clone();
 
@@ -206,13 +203,12 @@ impl WebRemote {
                         let cache_c = cache_dir.clone();
                         let it_c = innertube.clone();
                         let snap_c = snap_ref.clone();
-                        let frame_c = frame_ref.clone();
                         let auth_c = auth_ref.clone();
                         let tx_c = tx_ref.clone();
 
                         thread::spawn(move || {
                             let _guard = ConnGuard(guard_ctr);
-                            handle_connection(stream, &db_c, &cache_c, &it_c, &snap_c, &frame_c, &auth_c, &tx_c);
+                            handle_connection(stream, &db_c, &cache_c, &it_c, &snap_c, &auth_c, &tx_c);
                         });
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -228,7 +224,6 @@ impl WebRemote {
         Some(Self {
             url: format!("http://{ip}:{port}"),
             snapshot,
-            frame_rgb565,
             rx,
             stop_flag,
             auth,
@@ -279,7 +274,6 @@ fn handle_connection(
     cache_dir: &Path,
     innertube: &Arc<Innertube>,
     snapshot: &Arc<Mutex<RemoteSnapshot>>,
-    frame_rgb565: &Arc<Mutex<Vec<u16>>>,
     auth: &Arc<Mutex<AuthState>>,
     tx: &mpsc::SyncSender<RemoteCmd>,
 ) {
@@ -301,7 +295,7 @@ fn handle_connection(
 
     let path = req.raw_url.split('?').next().unwrap_or("/");
     if path.starts_with("/api/") {
-        handle_api(stream, &req, path, db, cache_dir, innertube, snapshot, frame_rgb565, auth, tx);
+        handle_api(stream, &req, path, db, cache_dir, innertube, snapshot, auth, tx);
         return;
     }
 
@@ -404,7 +398,6 @@ fn handle_api(
     cache_dir: &Path,
     innertube: &Arc<Innertube>,
     snapshot: &Arc<Mutex<RemoteSnapshot>>,
-    frame_rgb565: &Arc<Mutex<Vec<u16>>>,
     auth: &Arc<Mutex<AuthState>>,
     tx: &mpsc::SyncSender<RemoteCmd>,
 ) {
@@ -771,44 +764,6 @@ fn handle_api(
             body.as_bytes(),
             &[("Content-Disposition", "attachment; filename=\"rusttune-library-backup.json\"")],
         );
-        return;
-    }
-
-    // ── Lossless Handheld 640x480 Screenshot PNG ────────────────────────
-    if method == "GET" && path == "/api/screenshot.png" {
-        let fb = frame_rgb565.lock().unwrap().clone();
-        if fb.len() != 640 * 480 {
-            send_err(stream, 503, "Framebuffer not ready yet");
-            return;
-        }
-        let mut rgb = Vec::with_capacity(640 * 480 * 3);
-        for px in fb {
-            let r5 = (px >> 11) & 0x1F;
-            let g6 = (px >> 5) & 0x3F;
-            let b5 = px & 0x1F;
-            rgb.push(((r5 * 255 + 15) / 31) as u8);
-            rgb.push(((g6 * 255 + 31) / 63) as u8);
-            rgb.push(((b5 * 255 + 15) / 31) as u8);
-        }
-        let mut png_bytes = Vec::new();
-        if let Some(img) = image::RgbImage::from_raw(640, 480, rgb) {
-            let mut cursor = std::io::Cursor::new(&mut png_bytes);
-            if img.write_to(&mut cursor, image::ImageFormat::Png).is_ok() {
-                send_response(
-                    stream,
-                    200,
-                    "OK",
-                    "image/png",
-                    &png_bytes,
-                    &[
-                        ("Cache-Control", "no-store"),
-                        ("Content-Disposition", "attachment; filename=\"rusttune-screenshot.png\""),
-                    ],
-                );
-                return;
-            }
-        }
-        send_err(stream, 500, "Failed to encode screenshot");
         return;
     }
 

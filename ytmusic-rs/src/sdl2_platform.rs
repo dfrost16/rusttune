@@ -571,11 +571,7 @@ impl SdlHost {
         out
     }
 
-    pub fn copy_rgb565(&self) -> Vec<u16> {
-        self.fb.iter().map(|p| p.0).collect()
-    }
-
-    pub fn render_if_needed(&mut self, force_present: bool) -> bool {
+    pub fn render_if_needed(&mut self, force_present: bool) {
         slint::platform::update_timers_and_animations();
         if self.slint_window.has_active_animations() {
             self.slint_window.request_redraw();
@@ -590,16 +586,16 @@ impl SdlHost {
         if drew || force_present {
             unsafe {
                 let Ok(upd) = self.sdl.get::<unsafe extern "C" fn(*mut c_void, *const SdlRect, *const c_void, c_int) -> c_int>(b"SDL_UpdateTexture\0") else {
-                    return drew;
+                    return;
                 };
                 let Ok(clr) = self.sdl.get::<unsafe extern "C" fn(*mut c_void) -> c_int>(b"SDL_RenderClear\0") else {
-                    return drew;
+                    return;
                 };
                 let Ok(cpy) = self.sdl.get::<unsafe extern "C" fn(*mut c_void, *mut c_void, *const SdlRect, *const SdlRect) -> c_int>(b"SDL_RenderCopy\0") else {
-                    return drew;
+                    return;
                 };
                 let Ok(pres) = self.sdl.get::<unsafe extern "C" fn(*mut c_void)>(b"SDL_RenderPresent\0") else {
-                    return drew;
+                    return;
                 };
                 upd(
                     self.texture,
@@ -612,7 +608,6 @@ impl SdlHost {
                 pres(self.renderer);
             }
         }
-        drew
     }
 }
 
