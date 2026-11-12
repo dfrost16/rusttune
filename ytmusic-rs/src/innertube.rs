@@ -104,6 +104,31 @@ impl Innertube {
         })
     }
 
+    #[cfg(test)]
+    pub fn new_empty_for_test() -> Self {
+        let cfg = ClientsConfig {
+            api_key: String::new(),
+            music_client: ClientFingerprint {
+                name: "test".into(),
+                enabled: true,
+                innertube_client_name: "WEB_REMIX".into(),
+                innertube_client_version: "1.20250101.01.00".into(),
+                client_name_id: 67,
+                user_agent: "RustTuneTest/1.0".into(),
+                context: json!({ "clientName": "WEB_REMIX", "clientVersion": "1.20250101.01.00" }),
+            },
+            player_clients: Vec::new(),
+        };
+        Self {
+            cfg,
+            agent: ureq::AgentBuilder::new()
+                .timeout_connect(Duration::from_secs(1))
+                .timeout_read(Duration::from_secs(1))
+                .build(),
+            visitor: Mutex::new((String::new(), None)),
+        }
+    }
+
     pub fn ensure_visitor_data(&self, force_refresh: bool) -> String {
         let mut guard = self.visitor.lock().unwrap();
         let expired = guard

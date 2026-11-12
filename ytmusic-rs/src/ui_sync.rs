@@ -1,4 +1,4 @@
-use crate::media::{color_from_rgb, fmt_time, theme_accent_pair};
+use crate::media::{color_from_rgb, fmt_time, local_clock_digits, parse_battery_pct, theme_accent_pair};
 use crate::state::{AppState, ConfirmAction, FindHit};
 use crate::{GridCard, PlaylistRow, TrackRow, YtMusicWindow};
 use slint::{Color, Image, ModelRc, SharedString, VecModel};
@@ -49,7 +49,13 @@ impl AppState {
         let dock_tab = match self.active_tab.as_str() {
             "vibe_detail" => "vibes",
             "artist_detail" | "album_detail" => {
-                if self.detail_origin == "find" { "find" } else { "artists" }
+                if self.detail_origin == "find" {
+                    "find"
+                } else if self.detail_origin == "now" {
+                    "now"
+                } else {
+                    "artists"
+                }
             }
             other => other,
         };
@@ -60,7 +66,14 @@ impl AppState {
         self.sync_details_and_lib(win);
         self.sync_find(win, now_id.as_deref());
 
+        win.set_light_mode(light_mode);
         win.set_battery_label(self.battery_label.clone().into());
+        win.set_battery_pct(parse_battery_pct(&self.battery_label));
+        let [h1, h2, m1, m2] = local_clock_digits();
+        win.set_clock_h1(h1.into());
+        win.set_clock_h2(h2.into());
+        win.set_clock_m1(m1.into());
+        win.set_clock_m2(m2.into());
         win.set_remote_url(
             self.remote
                 .as_ref()
@@ -137,6 +150,7 @@ impl AppState {
             win.set_is_offline_now(false);
         }
         win.set_now_genre(self.now_genre.clone().into());
+        win.set_now_artist_focused(self.now_artist_focused);
 
         if let Some(id) = now_id {
             if let Some(img) = self.cover_cache.get(id) {
@@ -211,7 +225,7 @@ impl AppState {
             );
 
             let mut upcoming = Vec::new();
-            for offset in 2..=4 {
+            for offset in 2..=6 {
                 if offset < self.queue.len() {
                     let q_i = (self.queue_pos + offset) % self.queue.len();
                     upcoming.push(self.queue[q_i].clone());
@@ -326,6 +340,7 @@ impl AppState {
 
     fn sync_details_and_lib(&self, win: &YtMusicWindow) {
         win.set_detail_top_focused(self.detail_top_focused);
+        win.set_filter_focused(self.filter_focused);
         if self.active_tab == "artist_detail" {
             win.set_detail_title(self.artist_title.clone().into());
             win.set_artist_kicker(self.artist_kicker.clone().into());

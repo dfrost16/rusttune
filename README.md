@@ -13,8 +13,8 @@ An audio-only, gamepad-first YouTube Music player built with Rust and Slint for 
 - **UI:** A clean beautiful UI made with RG35XX H in mind.
 - **Themes:** Dynamic theming based on cover art, plus Studio Dark and Studio Light modes (and `#000000` AMOLED mode on mobile web).
 - **Lyrics:** Support for time-synced 3-line lyrics via LRCLIB with YouTube Music plain lyrics fallback.
-- **Navigation:** Navigate your Library, history, or artists, or just enjoy music based on mood (Vibes).
-- **Pocket Lock:** A minimal black screen pocket mode (`L3`) to save battery while audio keeps playing.
+- **Navigation:** Navigate your Home library (Favorites, Playlists, History, Downloads), search inside Home, browse Artists, or enjoy music based on mood (Vibes).
+- **Pocket Lock:** A minimal Solari split-flap lockscreen (`L3`) in Obsidian Dark or Warm Ivory (matching your theme) showing clock, track title, time, seek bar, and battery while audio keeps playing.
 - **Web UI:** A polished local Web UI secured by a 6-digit pairing PIN to manage playlists, import YouTube playlists by URL, and delete offline `.m4a` files, optimised for both phone and desktop.
 
 ## Screenshots
@@ -58,6 +58,21 @@ An audio-only, gamepad-first YouTube Music player built with Rust and Slint for 
 1. Extract `rusttune.zip` so both `RustTune.sh` and the `rusttune/` folder sit inside your `ports/` directory (for example `/roms/ports/RustTune.sh` and `/roms/ports/rusttune/`).
 2. Refresh your games list in EmulationStation and launch **RustTune** from **Ports**.
 
+### Verify Release Checksum (Optional)
+
+Download both `rusttune.zip` and `rusttune.zip.sha256` from the release assets into the same folder, then verify:
+
+```bash
+# Linux / macOS
+sha256sum -c rusttune.zip.sha256
+```
+
+```powershell
+# Windows PowerShell
+Get-Content rusttune.zip.sha256
+(Get-FileHash rusttune.zip -Algorithm SHA256).Hash.ToLower()
+```
+
 ### Using the Local Web UI
 
 1. Connect your RG35XX H and phone/PC to the same Wi-Fi network.
@@ -68,27 +83,25 @@ An audio-only, gamepad-first YouTube Music player built with Rust and Slint for 
 
 | Screen | Button | Action |
 |---|---|---|
-| **Global** | `L1` / `R1` | Switch dock tabs (`Now`, `Vibes`, `Artists`, `Lib`, `Find`) |
+| **Global** | `L1` / `R1` | Switch dock tabs (`Now`, `Vibes`, `Artists`, `Home`, `Find`) |
 | | `L2` / `R2` | Previous / Next track from any screen |
 | | `SELECT` | Open / close Settings (Theme, Loop, Radio Autoplay, Swap A/B, Local Web Server, Web Security PIN, Quit) |
-| | `L3` | Toggle Pocket Lock (`L3` or `START` unlocks) |
+| | `L3` | Toggle Solari Pocket Lock (`L3` or `START` unlocks) |
 | | `START` | Add selected/current track to a Playlist |
-| **Now Playing** | `A` | Play / Pause |
-| | `D-Pad Left` / `Right` | Seek -10s / +10s |
-| | `R-Stick Left` / `Right` | Seek -30s / +30s |
-| | `D-Pad Up` / `Down` | Previous / Next track |
+| **Now Playing** | `A` | Play / Pause (or open Artist page when Artist pill is focused) |
+| | `D-Pad` / `L-Stick Left` / `Right` | Seek -10s / +10s |
+| | `D-Pad` / `L-Stick Up` / `Down` | Previous / Next track |
+| | `R-Stick` | Highlight / focus the Artist pill (`A` opens Artist page; `R-Stick Down` / `B` unfocuses) |
 | | `R3` | Loop current song ON / OFF |
 | | `X` / `Y` | Toggle Favorite / Download `.m4a` offline |
-| **Vibes & Artists** | `D-Pad` | Navigate 3x2 grid cards |
-| | `R-Stick Up` / `Down` | Jump pages fast |
-| | `A` | Open Vibe mix or Artist page |
-| | `X` / `Y` | Favorite card / Toggle Favorites Only |
-| | `R3` | Open search/filter keyboard |
-| **Library (`Lib`)** | `D-Pad Left` / `Right` or `R-Stick L/R` | Switch sub-tabs (`Favs`, `Playlists`, `History`, `Downloads`) |
-| | `D-Pad Up` above row 0 | Focus header action (`Clear` all downloads in Downloads) |
-| | `R-Stick Up` / `Down` | Jump +/- 5 rows |
-| | `A` / `X` / `Y` | Play track / Toggle Favorite / Download (or Delete file in Downloads) |
-| | `R3` | Filter current Library view |
+| **Vibes & Artists** | `D-Pad` / `L-Stick` / `R-Stick` | Navigate 3x2 grid cards (`Up` / `R-Stick Up` from top row focuses Search bar) |
+| | `A` | Open Vibe mix, Artist page, or Search keyboard (when Search bar is focused) |
+| | `X` / `Y` | Favorite card (or Clear filter when Search bar focused) / Toggle Favorites Only |
+| | `R3` | Open search/filter keyboard directly |
+| **Home (`Home`)** | `D-Pad Left` / `Right` or `R-Stick L/R` | Switch sub-tabs (`Favs`, `Playlists`, `History`, `Downloads`) |
+| | `D-Pad` / `R-Stick Up` / `Down` | Navigate tracks (`Up` / `R-Stick Up` at top focuses Clear All in Downloads, then Search bar) |
+| | `A` / `X` / `Y` | Play track (or open Search keyboard when Search bar focused) / Favorite / Download or Delete |
+| | `R3` | Open Home search keyboard directly |
 | **Detail Pages** | `D-Pad Up` above row 0 | Focus `[Download All]` button (`A` opens confirmation modal) |
 | | `D-Pad L/R` or `R-Stick L/R` | Switch `Songs / Albums / Singles` on Artist Detail |
 | **Find / Keyboard** | `D-Pad` | Navigate keys (`Up` from top row enters Hits / Suggestions) |

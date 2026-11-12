@@ -1,0 +1,308 @@
+import { GridCard, GridHeaderBar, ThemeColors } from "types.slint";
+
+export component VibesGridView inherits VerticalLayout {
+    in property <ThemeColors> theme;
+    in property <[GridCard]> vibe-cards;
+    in property <int> vibe-index;
+    in property <int> vibe-row-scroll;
+    in property <bool> vibe-fav-only;
+    in property <string> vibe-filter;
+    in property <bool> filter-focused: false;
+
+    padding: 16px;
+    spacing: 12px;
+
+    GridHeaderBar {
+        theme: root.theme;
+        heading: "Vibes";
+        filter-text: root.vibe-filter;
+        placeholder: "▲ / R3: Search  ·  X: ♥ Vibe";
+        fav-only: root.vibe-fav-only;
+        search-focused: root.filter-focused;
+    }
+
+    // 3x2 Scrollable Cards
+    Rectangle {
+        vertical-stretch: 1;
+        clip: true;
+        if root.vibe-cards.length == 0 : Text {
+            text: "No matching Vibes. Press Y to show all.";
+            color: root.theme.muted;
+            font-size: 13px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        for card[i] in root.vibe-cards : Rectangle {
+            property <int> grid-col: mod(i, 3);
+            property <int> grid-row: floor(i / 3) - root.vibe-row-scroll;
+            property <bool> sel: root.vibe-index == i;
+            property <int> pat: mod(i, 4);
+            x: grid-col * 206px;
+            y: grid-row * 174px;
+            width: 196px;
+            height: 164px;
+            visible: grid-row >= 0 && grid-row < 2;
+            border-radius: 16px;
+            background: root.theme.card;
+            clip: true;
+
+            if pat == 0 : Rectangle {
+                width: 100%; height: 100%;
+                opacity: sel ? 0.62 : 0.40;
+                background: @radial-gradient(circle, card.accent 0%, #00000000 82%);
+            }
+            if pat == 1 : Rectangle {
+                width: 100%; height: 100%;
+                opacity: sel ? 0.56 : 0.36;
+                background: @linear-gradient(215deg, card.accent 0%, #00000000 68%);
+            }
+            if pat == 2 : Rectangle {
+                width: 100%; height: 100%;
+                opacity: sel ? 0.54 : 0.34;
+                background: @linear-gradient(90deg, card.accent 0%, #00000000 72%);
+            }
+            if pat == 3 : Rectangle {
+                width: 100%; height: 100%;
+                opacity: sel ? 0.56 : 0.36;
+                background: @linear-gradient(330deg, card.accent 0%, #00000000 70%);
+            }
+
+            Rectangle {
+                x: pat == 0 ? 78px : (pat == 1 ? -30px : (pat == 2 ? 90px : 34px));
+                y: pat == 0 ? -36px : (pat == 1 ? 64px : (pat == 2 ? 70px : -28px));
+                width: 150px;
+                height: 150px;
+                border-radius: 75px;
+                opacity: sel ? 0.30 : 0.16;
+                background: @radial-gradient(circle, card.accent 0%, #00000000 70%);
+            }
+            Rectangle {
+                width: 100%;
+                height: 100%;
+                background: @linear-gradient(180deg, #00000000 35%, root.theme.card 98%);
+            }
+
+            VerticalLayout {
+                padding: 14px;
+                HorizontalLayout {
+                    Rectangle {
+                        height: 20px;
+                        width: vb-tag.preferred-width + 14px;
+                        border-radius: 10px;
+                        background: sel ? card.accent : root.theme.card2;
+                        border-width: 1px;
+                        border-color: card.accent;
+                        vb-tag := Text {
+                            text: card.count_label;
+                            color: sel ? #ffffff : root.theme.text;
+                            font-size: 9px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    Text {
+                        text: card.is_fav ? "♥" : "♡";
+                        color: card.is_fav ? root.theme.heart : root.theme.muted;
+                        font-size: 13px;
+                        font-weight: 700;
+                    }
+                }
+                Rectangle { vertical-stretch: 1; }
+                Rectangle {
+                    width: sel ? 34px : 20px;
+                    height: 3px;
+                    border-radius: 2px;
+                    background: card.accent;
+                }
+                Rectangle { height: 5px; }
+                Text {
+                    text: card.title;
+                    color: root.theme.text;
+                    font-size: 15px;
+                    font-weight: 700;
+                    overflow: elide;
+                }
+                Text {
+                    text: card.subtitle;
+                    color: root.theme.muted;
+                    font-size: 11px;
+                    overflow: elide;
+                }
+            }
+
+            Rectangle {
+                width: 100%;
+                height: 100%;
+                border-radius: 16px;
+                border-width: sel ? 2px : 1px;
+                border-color: sel ? root.theme.accent : root.theme.border;
+                background: transparent;
+            }
+        }
+    }
+}
+
+export component ArtistsGridView inherits VerticalLayout {
+    in property <ThemeColors> theme;
+    in property <[GridCard]> artist-cards;
+    in property <int> artist-index;
+    in property <int> artist-row-scroll;
+    in property <bool> artist-fav-only;
+    in property <string> artist-filter;
+    in property <string> artist-page-label;
+    in property <bool> filter-focused: false;
+
+    padding: 16px;
+    spacing: 12px;
+
+    GridHeaderBar {
+        theme: root.theme;
+        heading: "Artists";
+        filter-text: root.artist-filter;
+        placeholder: "▲ / R3: Search  ·  X: ♥ Artist";
+        fav-only: root.artist-fav-only;
+        search-focused: root.filter-focused;
+    }
+
+    Rectangle {
+        vertical-stretch: 1;
+        clip: true;
+        if root.artist-cards.length == 0 : Text {
+            text: "No matching artists. Press R2 to search YouTube Music!";
+            color: root.theme.muted;
+            font-size: 13px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        for card[i] in root.artist-cards : Rectangle {
+            property <int> grid-col: mod(i, 3);
+            property <int> grid-row: floor(i / 3) - root.artist-row-scroll;
+            property <bool> sel: root.artist-index == i;
+            x: grid-col * 206px;
+            y: grid-row * 164px;
+            width: 196px;
+            height: 154px;
+            visible: grid-row >= 0 && grid-row < 2;
+            border-radius: 16px;
+            background: #141720;
+            clip: true;
+
+            if card.has_thumb : Image {
+                width: 100%;
+                height: 100%;
+                source: card.thumb;
+                image-fit: cover;
+            }
+            if !card.has_thumb : Rectangle {
+                width: 100%;
+                height: 100%;
+                background: @linear-gradient(145deg, card.accent 0%, #11131a 100%);
+                Text {
+                    text: card.initial;
+                    color: #ffffff44;
+                    font-size: 56px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            Rectangle {
+                width: 100%;
+                height: 100%;
+                background: @linear-gradient(180deg, #0a0c1228 0%, #0a0c1200 34%, #0a0c1288 62%, #0a0c12eb 86%, #0a0c12f8 100%);
+            }
+            if !sel : Rectangle {
+                width: 100%;
+                height: 100%;
+                background: #00000024;
+            }
+
+            VerticalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                padding-top: 9px;
+                padding-bottom: 10px;
+                HorizontalLayout {
+                    Rectangle {
+                        height: 19px;
+                        width: b-txt.preferred-width + 14px;
+                        border-radius: 7px;
+                        border-width: sel ? 0px : 1px;
+                        border-color: #ffffff20;
+                        background: sel ? root.theme.accent : #0e1016b8;
+                        b-txt := Text {
+                            text: card.count_label;
+                            color: sel ? root.theme.accent-fg : #f3f4f6;
+                            font-size: 9px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    Rectangle {
+                        width: 22px;
+                        height: 22px;
+                        border-radius: 11px;
+                        border-width: card.is_fav ? 0px : 1px;
+                        border-color: #ffffff24;
+                        background: card.is_fav ? root.theme.heart : #0e1016b8;
+                        Text {
+                            text: card.is_fav ? "♥" : "♡";
+                            color: card.is_fav ? #ffffff : #d1d5db;
+                            font-size: 11px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                Rectangle { vertical-stretch: 1; }
+                Text {
+                    text: card.title;
+                    color: sel ? root.theme.accent : #ffffff;
+                    font-size: 14px;
+                    font-weight: 700;
+                    overflow: elide;
+                }
+                Text {
+                    text: card.subtitle;
+                    color: #f3f4f6cc;
+                    font-size: 10px;
+                    overflow: elide;
+                }
+            }
+
+            Rectangle {
+                width: 100%;
+                height: 100%;
+                border-radius: 16px;
+                border-width: sel ? 2px : 1px;
+                border-color: sel ? root.theme.accent : root.theme.border;
+                background: transparent;
+            }
+        }
+    }
+
+    HorizontalLayout {
+        height: 16px;
+        Text {
+            text: "A: Open Artist · X: ♥ Fav · Y: Filter Favs · ▲ / R3: Search";
+            color: root.theme.muted;
+            font-size: 10px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Text {
+            text: root.artist-page-label;
+            color: root.theme.accent;
+            font-size: 10px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+    }
+}

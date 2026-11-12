@@ -1,10 +1,10 @@
 use crate::db::save_settings;
-use crate::sdl2_platform::{HandheldBtn, SdlHost};
+use crate::sdl2_platform::{HandheldBtn, PlaybackHost};
 use crate::state::{AppState, BgMsg, ConfirmAction, FindHit, DOCK_TABS, NUM_KEYS, QWERTY_KEYS};
 use std::thread;
 
 impl AppState {
-    pub fn handle_button(&mut self, btn: HandheldBtn, sdl: &mut SdlHost) {
+    pub fn handle_button<H: PlaybackHost>(&mut self, btn: HandheldBtn, sdl: &mut H) {
         if self.pocket_lock {
             if btn == HandheldBtn::L3 || btn == HandheldBtn::Start {
                 self.pocket_lock = false;
@@ -98,7 +98,7 @@ impl AppState {
         true
     }
 
-    fn handle_settings_modal(&mut self, btn: HandheldBtn, sdl: &mut SdlHost) -> bool {
+    fn handle_settings_modal<H: PlaybackHost>(&mut self, btn: HandheldBtn, sdl: &mut H) -> bool {
         if !self.settings_open {
             return false;
         }
@@ -123,12 +123,12 @@ impl AppState {
                 }
                 3 => {
                     self.cfg.swap_ab = !self.cfg.swap_ab;
-                    sdl.swap_ab = self.cfg.swap_ab;
+                    sdl.set_swap_ab(self.cfg.swap_ab);
                     save_settings(&self.settings_path, &self.cfg);
                 }
                 4 => self.toggle_web_server(),
                 5 => self.toggle_web_pin(),
-                6 => sdl.should_quit = true,
+                6 => sdl.request_quit(),
                 _ => {}
             },
             _ => {}
@@ -205,7 +205,10 @@ impl AppState {
             HandheldBtn::R3 => self.kbd_num_mode = !self.kbd_num_mode,
             HandheldBtn::X => push_char(self, " "),
             HandheldBtn::Y => pop_char(self),
-            HandheldBtn::B => self.grid_kbd_open = false,
+            HandheldBtn::B => {
+                self.grid_kbd_open = false;
+                self.filter_focused = false;
+            }
             HandheldBtn::A => {
                 let key = if self.kbd_num_mode {
                     NUM_KEYS[self.key_row * 10 + self.key_col]
@@ -237,6 +240,7 @@ impl AppState {
                     },
                     "GO" => {
                         self.grid_kbd_open = false;
+                        self.filter_focused = false;
                         if cur_tab == "artists" {
                             let q = self.artist_filter.trim().to_string();
                             if q.is_empty() {
@@ -276,6 +280,8 @@ impl AppState {
     fn switch_dock_tab(&mut self, forward: bool) {
         self.grid_kbd_open = false;
         self.detail_top_focused = false;
+        self.filter_focused = false;
+        self.now_artist_focused = false;
         let cur_dock = match self.active_tab.as_str() {
             "vibe_detail" => "vibes",
             "artist_detail" | "album_detail" => {
@@ -297,7 +303,7 @@ impl AppState {
         }
     }
 
-    fn seek_relative(&mut self, sdl: &SdlHost, delta_secs: i64) {
+    fn seek_relative<H: PlaybackHost>(&mut self, sdl: &H, delta_secs: i64) {
         let Some(ref s) = self.session else {
             return;
         };
@@ -312,15 +318,28 @@ impl AppState {
         self.set_toast(format!("Seek {sign}{delta_secs}s"));
     }
 
-    fn handle_now_button(&mut self, btn: HandheldBtn, sdl: &SdlHost) {
+    fn handle_now_button<H: PlaybackHost>(&mut self, btn: HandheldBtn, sdl: &H) {
         match btn {
-            HandheldBtn::A => self.toggle_play_pause(sdl),
-            HandheldBtn::Up | HandheldBtn::RightUp => self.prev_track(sdl),
-            HandheldBtn::Down | HandheldBtn::RightDown => self.next_track(sdl),
+            HandheldBtn::RightUp | HandheldBtn::RightRight | HandheldBtn::RightLeft => {
+                if self.now_track.is_some() {
+                    self.now_artist_focused = true;
+                }
+            }
+            HandheldBtn::RightDown | HandheldBtn::B => {
+                self.now_artist_focused = false;
+            }
+            HandheldBtn::A => {
+                if self.now_artist_focused && self.now_track.is_some() {
+                    self.now_artist_focused = false;
+                    self.open_now_artist();
+                } else {
+                    self.toggle_play_pause(sdl);
+                }
+            }
+            HandheldBtn::Up => self.prev_track(sdl),
+            HandheldBtn::Down => self.next_track(sdl),
             HandheldBtn::Left => self.seek_relative(sdl, -10),
             HandheldBtn::Right => self.seek_relative(sdl, 10),
-            HandheldBtn::RightLeft => self.seek_relative(sdl, -30),
-            HandheldBtn::RightRight => self.seek_relative(sdl, 30),
             HandheldBtn::X => {
                 if let Some(ref mut t) = self.now_track {
                     let fav = self.db.toggle_favorite(t);
@@ -347,17 +366,16 @@ impl AppState {
             return false;
         }
         match btn {
-            HandheldBtn::Right => *index = (*index + 1) % len,
-            HandheldBtn::Left => *index = (*index + len - 1) % len,
-            HandheldBtn::Down => *index = if *index + 3 < len { *index + 3 } else { *index % 3 },
-            HandheldBtn::RightDown => *index = (*index + 6).min(len - 1),
-            HandheldBtn::RightUp => *index = index.saturating_sub(6),
-            HandheldBtn::Up => {
+            HandheldBtn::Right | HandheldBtn::RightRight => *index = (*index + 1) % len,
+            HandheldBtn::Left | HandheldBtn::RightLeft => *index = (*index + len - 1) % len,
+            HandheldBtn::Down | HandheldBtn::RightDown => {
+                *index = if *index + 3 < len { *index + 3 } else { *index % 3 }
+            }
+            HandheldBtn::Up | HandheldBtn::RightUp => {
                 if *index >= 3 {
                     *index -= 3;
                 } else {
-                    let last = ((len - 1) / 3) * 3 + (*index % 3);
-                    *index = if last < len { last } else { last.saturating_sub(3) };
+                    return false;
                 }
             }
             _ => return false,
@@ -366,13 +384,41 @@ impl AppState {
         true
     }
 
+    fn open_grid_keyboard(&mut self) {
+        self.key_row = 0;
+        self.key_col = 0;
+        self.kbd_num_mode = false;
+        self.grid_kbd_open = true;
+    }
+
     fn handle_vibes_button(&mut self, btn: HandheldBtn) {
+        if self.filter_focused {
+            match btn {
+                HandheldBtn::A | HandheldBtn::R3 => self.open_grid_keyboard(),
+                HandheldBtn::Down | HandheldBtn::RightDown | HandheldBtn::B => {
+                    self.filter_focused = false;
+                }
+                HandheldBtn::X => {
+                    self.vibe_filter.clear();
+                    self.vibe_index = 0;
+                    self.vibe_row_scroll = 0;
+                }
+                HandheldBtn::Y => {
+                    self.vibe_fav_only = !self.vibe_fav_only;
+                    self.vibe_index = 0;
+                    self.vibe_row_scroll = 0;
+                }
+                _ => {}
+            }
+            return;
+        }
         let list = self.filtered_vibes();
         let len = list.len();
         if Self::nav_grid_index(&mut self.vibe_index, &mut self.vibe_row_scroll, len, btn) {
             return;
         }
         match btn {
+            HandheldBtn::Up | HandheldBtn::RightUp => self.filter_focused = true,
             HandheldBtn::X if len > 0 => {
                 let id = list[self.vibe_index].id.clone();
                 let on = self.db.toggle_fav_vibe(&id);
@@ -389,12 +435,7 @@ impl AppState {
                 self.vibe_index = 0;
                 self.vibe_row_scroll = 0;
             }
-            HandheldBtn::R3 => {
-                self.key_row = 0;
-                self.key_col = 0;
-                self.kbd_num_mode = false;
-                self.grid_kbd_open = true;
-            }
+            HandheldBtn::R3 => self.open_grid_keyboard(),
             HandheldBtn::A if len > 0 => self.open_vibe_detail(list[self.vibe_index].clone()),
             HandheldBtn::B => self.active_tab = "now".into(),
             _ => {}
@@ -402,6 +443,28 @@ impl AppState {
     }
 
     fn handle_artists_button(&mut self, btn: HandheldBtn) {
+        if self.filter_focused {
+            match btn {
+                HandheldBtn::A | HandheldBtn::R3 => self.open_grid_keyboard(),
+                HandheldBtn::Down | HandheldBtn::RightDown | HandheldBtn::B => {
+                    self.filter_focused = false;
+                }
+                HandheldBtn::X => {
+                    self.artist_filter.clear();
+                    self.artist_index = 0;
+                    self.artist_row_scroll = 0;
+                    self.ensure_visible_artist_thumbs();
+                }
+                HandheldBtn::Y => {
+                    self.artist_fav_only = !self.artist_fav_only;
+                    self.artist_index = 0;
+                    self.artist_row_scroll = 0;
+                    self.ensure_visible_artist_thumbs();
+                }
+                _ => {}
+            }
+            return;
+        }
         let list = self.filtered_artists();
         let len = list.len();
         if Self::nav_grid_index(&mut self.artist_index, &mut self.artist_row_scroll, len, btn) {
@@ -409,6 +472,7 @@ impl AppState {
             return;
         }
         match btn {
+            HandheldBtn::Up | HandheldBtn::RightUp => self.filter_focused = true,
             HandheldBtn::X if len > 0 => {
                 let name = list[self.artist_index].name.clone();
                 let on = self.db.toggle_fav_artist(&name);
@@ -426,19 +490,14 @@ impl AppState {
                 self.artist_row_scroll = 0;
                 self.ensure_visible_artist_thumbs();
             }
-            HandheldBtn::R3 => {
-                self.key_row = 0;
-                self.key_col = 0;
-                self.kbd_num_mode = false;
-                self.grid_kbd_open = true;
-            }
+            HandheldBtn::R3 => self.open_grid_keyboard(),
             HandheldBtn::A if len > 0 => self.open_artist_detail(list[self.artist_index].clone(), "artists"),
             HandheldBtn::B => self.active_tab = "now".into(),
             _ => {}
         }
     }
 
-    fn handle_detail_button(&mut self, btn: HandheldBtn, sdl: &SdlHost) {
+    fn handle_detail_button<H: PlaybackHost>(&mut self, btn: HandheldBtn, sdl: &H) {
         let len = self.detail_tracks.len();
         match btn {
             HandheldBtn::Up if len > 0 => {
@@ -491,6 +550,9 @@ impl AppState {
                     self.queue = self.detail_tracks.clone();
                     let kind = if self.active_tab == "vibe_detail" { "VIBE" } else { "ALBUM" };
                     self.queue_label = format!("{kind} · {}", self.detail_title).to_uppercase();
+                    if self.active_tab == "vibe_detail" {
+                        self.now_genre = self.detail_title.to_uppercase();
+                    }
                     self.start_playing_track(tr, sdl, false);
                 }
             }
@@ -520,7 +582,7 @@ impl AppState {
         }
     }
 
-    fn handle_artist_detail_button(&mut self, btn: HandheldBtn, sdl: &SdlHost) {
+    fn handle_artist_detail_button<H: PlaybackHost>(&mut self, btn: HandheldBtn, sdl: &H) {
         let len = self.artist_active_len();
         match btn {
             HandheldBtn::Left | HandheldBtn::RightLeft => {
@@ -636,7 +698,7 @@ impl AppState {
         }
     }
 
-    fn handle_lib_button(&mut self, btn: HandheldBtn, sdl: &SdlHost) {
+    fn handle_lib_button<H: PlaybackHost>(&mut self, btn: HandheldBtn, sdl: &H) {
         const LIB_MODES: [&str; 4] = ["favs", "playlists", "history", "downloads"];
         let switch_lib = |cur: &str, delta: usize| -> String {
             let i = LIB_MODES.iter().position(|&m| m == cur).unwrap_or(0);
@@ -648,6 +710,7 @@ impl AppState {
                 let delta = if btn == HandheldBtn::RightRight { 1 } else { 3 };
                 self.lib_mode = switch_lib(&self.lib_mode, delta);
                 self.detail_top_focused = false;
+                self.filter_focused = false;
                 self.lib_focus_playlists = true;
                 self.list_index = 0;
                 self.list_scroll = 0;
@@ -655,14 +718,13 @@ impl AppState {
                 return;
             }
             HandheldBtn::R3 => {
-                self.key_row = 0;
-                self.key_col = 0;
-                self.kbd_num_mode = false;
-                self.grid_kbd_open = true;
+                self.open_grid_keyboard();
                 return;
             }
             HandheldBtn::B => {
-                if self.detail_top_focused {
+                if self.filter_focused {
+                    self.filter_focused = false;
+                } else if self.detail_top_focused {
                     self.detail_top_focused = false;
                 } else if self.lib_mode == "playlists" && !self.lib_focus_playlists {
                     self.lib_focus_playlists = true;
@@ -674,6 +736,21 @@ impl AppState {
             _ => {}
         }
 
+        if self.filter_focused {
+            match btn {
+                HandheldBtn::A => self.open_grid_keyboard(),
+                HandheldBtn::Down | HandheldBtn::RightDown => self.filter_focused = false,
+                HandheldBtn::X => {
+                    self.lib_filter.clear();
+                    self.list_index = 0;
+                    self.list_scroll = 0;
+                    self.refresh_lib_tracks();
+                }
+                _ => {}
+            }
+            return;
+        }
+
         if self.lib_mode == "playlists" && self.lib_focus_playlists {
             let plen = self.playlists.len();
             match btn {
@@ -683,11 +760,15 @@ impl AppState {
                     self.list_scroll = 0;
                     self.refresh_lib_tracks();
                 }
-                HandheldBtn::Up if plen > 0 => {
-                    self.playlist_index = (self.playlist_index + plen - 1) % plen;
-                    self.refresh_lib_tracks();
+                HandheldBtn::Up | HandheldBtn::RightUp => {
+                    if plen == 0 || self.playlist_index == 0 {
+                        self.filter_focused = true;
+                    } else {
+                        self.playlist_index -= 1;
+                        self.refresh_lib_tracks();
+                    }
                 }
-                HandheldBtn::Down if plen > 0 => {
+                HandheldBtn::Down | HandheldBtn::RightDown if plen > 0 => {
                     self.playlist_index = (self.playlist_index + 1) % plen;
                     self.refresh_lib_tracks();
                 }
@@ -722,35 +803,30 @@ impl AppState {
                 self.list_scroll = 0;
                 self.refresh_lib_tracks();
             }
-            HandheldBtn::Up if len > 0 => {
-                if self.lib_mode == "downloads" && !self.detail_top_focused && self.list_index == 0 {
-                    self.detail_top_focused = true;
+            HandheldBtn::Up | HandheldBtn::RightUp => {
+                if len == 0 {
+                    self.filter_focused = true;
                 } else if self.detail_top_focused {
                     self.detail_top_focused = false;
-                    self.list_index = len - 1;
-                    self.clamp_list(len);
+                    self.filter_focused = true;
+                } else if self.list_index == 0 {
+                    if self.lib_mode == "downloads" {
+                        self.detail_top_focused = true;
+                    } else {
+                        self.filter_focused = true;
+                    }
                 } else {
-                    self.list_index = (self.list_index + len - 1) % len;
+                    self.list_index -= 1;
                     self.clamp_list(len);
                 }
             }
-            HandheldBtn::Down if len > 0 => {
+            HandheldBtn::Down | HandheldBtn::RightDown if len > 0 => {
                 if self.detail_top_focused {
                     self.detail_top_focused = false;
                     self.list_index = 0;
                 } else {
                     self.list_index = (self.list_index + 1) % len;
                 }
-                self.clamp_list(len);
-            }
-            HandheldBtn::RightUp if len > 0 => {
-                self.detail_top_focused = false;
-                self.list_index = self.list_index.saturating_sub(5);
-                self.clamp_list(len);
-            }
-            HandheldBtn::RightDown if len > 0 => {
-                self.detail_top_focused = false;
-                self.list_index = (self.list_index + 5).min(len - 1);
                 self.clamp_list(len);
             }
             HandheldBtn::A => {
@@ -799,7 +875,7 @@ impl AppState {
         }
     }
 
-    fn handle_find_button(&mut self, btn: HandheldBtn, sdl: &SdlHost) {
+    fn handle_find_button<H: PlaybackHost>(&mut self, btn: HandheldBtn, sdl: &H) {
         match self.find_zone {
             0 => match btn {
                 HandheldBtn::Left if !self.suggest_chips.is_empty() => {
@@ -928,5 +1004,195 @@ impl AppState {
                 _ => {}
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[derive(Default)]
+    struct MockHost {
+        paused: Cell<bool>,
+        clears: Cell<u32>,
+        swap_ab: bool,
+        should_quit: bool,
+    }
+
+    impl PlaybackHost for MockHost {
+        fn clear_audio_queue(&self) {
+            self.clears.set(self.clears.get() + 1);
+        }
+        fn set_audio_paused(&self, paused: bool) {
+            self.paused.set(paused);
+        }
+        fn set_swap_ab(&mut self, swap: bool) {
+            self.swap_ab = swap;
+        }
+        fn request_quit(&mut self) {
+            self.should_quit = true;
+        }
+    }
+
+    fn temp_state(tag: &str) -> (AppState, std::path::PathBuf) {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("rusttune_input_{tag}_{nanos}"));
+        let state = AppState::new_for_test(&dir);
+        (state, dir)
+    }
+
+    #[test]
+    fn pocket_lock_blocks_inputs_until_l3_or_start() {
+        let (mut state, dir) = temp_state("pocket");
+        let mut host = MockHost::default();
+        state.active_tab = "now".into();
+
+        state.handle_button(HandheldBtn::L3, &mut host);
+        assert!(state.pocket_lock);
+
+        state.handle_button(HandheldBtn::R1, &mut host);
+        state.handle_button(HandheldBtn::Select, &mut host);
+        assert_eq!(state.active_tab, "now");
+        assert!(!state.settings_open);
+
+        state.handle_button(HandheldBtn::Start, &mut host);
+        assert!(!state.pocket_lock);
+
+        state.handle_button(HandheldBtn::L3, &mut host);
+        assert!(state.pocket_lock);
+        state.handle_button(HandheldBtn::L3, &mut host);
+        assert!(!state.pocket_lock);
+
+        drop(state);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dock_tabs_wrap_with_l1_and_r1() {
+        let (mut state, dir) = temp_state("dock");
+        let mut host = MockHost::default();
+        state.active_tab = "now".into();
+
+        let expected = ["vibes", "artists", "lib", "find", "now"];
+        for tab in expected {
+            state.handle_button(HandheldBtn::R1, &mut host);
+            assert_eq!(state.active_tab, tab);
+        }
+
+        state.handle_button(HandheldBtn::L1, &mut host);
+        assert_eq!(state.active_tab, "find");
+
+        drop(state);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn settings_modal_toggles_and_quit() {
+        let (mut state, dir) = temp_state("settings");
+        let mut host = MockHost::default();
+
+        state.handle_button(HandheldBtn::Select, &mut host);
+        assert!(state.settings_open);
+        assert_eq!(state.settings_index, 0);
+
+        for _ in 0..3 {
+            state.handle_button(HandheldBtn::Down, &mut host);
+        }
+        assert_eq!(state.settings_index, 3);
+        state.handle_button(HandheldBtn::A, &mut host);
+        assert!(state.cfg.swap_ab);
+        assert!(host.swap_ab);
+
+        for _ in 0..3 {
+            state.handle_button(HandheldBtn::Down, &mut host);
+        }
+        assert_eq!(state.settings_index, 6);
+        state.handle_button(HandheldBtn::A, &mut host);
+        assert!(host.should_quit);
+
+        state.handle_button(HandheldBtn::Select, &mut host);
+        assert!(!state.settings_open);
+
+        drop(state);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn confirm_modal_accepts_and_cancels() {
+        let (mut state, dir) = temp_state("confirm");
+        let mut host = MockHost::default();
+        let file = state.cache_dir.join("vid1.m4a");
+        std::fs::write(&file, b"audio-bytes").unwrap();
+        let track = crate::db::TrackMeta {
+            video_id: "vid1".into(),
+            title: "Song".into(),
+            artist: "Artist".into(),
+            album: String::new(),
+            duration_secs: 60,
+            thumb_url: String::new(),
+            local_path: None,
+            file_bytes: 0,
+            is_favorite: false,
+        };
+        state.db.upsert_track(&track, false);
+        state
+            .db
+            .set_offline(&track, Some(&file.to_string_lossy()), 11);
+
+        state.confirm_action = Some(ConfirmAction::ClearAllDownloads {
+            count: 1,
+            freed_label: "11 B".into(),
+        });
+        state.handle_button(HandheldBtn::B, &mut host);
+        assert!(state.confirm_action.is_none());
+        assert_eq!(state.db.list_offline().len(), 1);
+
+        state.confirm_action = Some(ConfirmAction::ClearAllDownloads {
+            count: 1,
+            freed_label: "11 B".into(),
+        });
+        state.handle_button(HandheldBtn::A, &mut host);
+        assert!(state.confirm_action.is_none());
+        assert_eq!(state.db.list_offline().len(), 0);
+        assert!(!file.exists());
+
+        drop(state);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn keyboard_r3_toggles_num_and_abc_modes() {
+        let (mut state, dir) = temp_state("kbd");
+        let mut host = MockHost::default();
+        state.active_tab = "find".into();
+        state.find_zone = 2;
+        assert!(!state.kbd_num_mode);
+
+        state.handle_button(HandheldBtn::R3, &mut host);
+        assert!(state.kbd_num_mode);
+        state.handle_button(HandheldBtn::R3, &mut host);
+        assert!(!state.kbd_num_mode);
+
+        // Selecting key (2, 8) switches "123" -> true, then "ABC" -> false.
+        state.key_row = 2;
+        state.key_col = 8;
+        state.handle_button(HandheldBtn::A, &mut host);
+        assert!(state.kbd_num_mode);
+        state.handle_button(HandheldBtn::A, &mut host);
+        assert!(!state.kbd_num_mode);
+
+        // Inline grid filter keyboard also toggles cleanly on R3.
+        state.active_tab = "artists".into();
+        state.grid_kbd_open = true;
+        state.handle_button(HandheldBtn::R3, &mut host);
+        assert!(state.kbd_num_mode);
+
+        drop(state);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

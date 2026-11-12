@@ -64,6 +64,14 @@ pub enum HandheldBtn {
     Guide,
 }
 
+/// Abstract playback & host controls so `input` and `workers` stay unit-testable without SDL2.
+pub trait PlaybackHost {
+    fn clear_audio_queue(&self);
+    fn set_audio_paused(&self, paused: bool);
+    fn set_swap_ab(&mut self, swap: bool);
+    fn request_quit(&mut self);
+}
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct SdlAudioSpec {
@@ -400,6 +408,27 @@ impl SdlHost {
             }
         }
     }
+}
+
+impl PlaybackHost for SdlHost {
+    fn clear_audio_queue(&self) {
+        SdlHost::clear_audio_queue(self);
+    }
+
+    fn set_audio_paused(&self, paused: bool) {
+        SdlHost::set_audio_paused(self, paused);
+    }
+
+    fn set_swap_ab(&mut self, swap: bool) {
+        self.swap_ab = swap;
+    }
+
+    fn request_quit(&mut self) {
+        self.should_quit = true;
+    }
+}
+
+impl SdlHost {
 
     pub fn queued_audio_bytes(&self) -> u32 {
         if self.audio_dev == 0 {

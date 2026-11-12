@@ -1,0 +1,454 @@
+import { MarqueeText, ThemeColors, TrackRow } from "types.slint";
+
+export component NowPlayingView inherits HorizontalLayout {
+    in property <ThemeColors> theme;
+    in property <bool> active;
+    in property <image> cover-art;
+    in property <bool> has-cover-art;
+    in property <bool> is-playing;
+    in property <bool> is-favorite-now;
+    in property <bool> is-offline-now;
+    in property <bool> loop-track;
+    in property <string> now-title;
+    in property <string> now-artist;
+    in property <bool> now-artist-focused: false;
+    in property <string> now-album;
+    in property <string> now-genre;
+    in property <string> now-elapsed;
+    in property <string> now-duration;
+    in property <string> now-format;
+    in property <string> lyric-prev;
+    in property <string> lyric-curr;
+    in property <string> lyric-next;
+    in property <string> next-title;
+    in property <string> next-artist;
+    in property <string> next-duration;
+    in property <string> playlist-label;
+    in property <[TrackRow]> now-playlist-rows;
+
+    padding: 18px;
+    spacing: 18px;
+
+    // Left Column: Album Art + 3-Line Lyrics + Duration/Bitrate
+    VerticalLayout {
+        width: 224px;
+        spacing: 10px;
+
+        // Album Art Card
+        Rectangle {
+            height: 182px;
+            background: root.theme.card;
+            border-width: 1px;
+            border-color: root.theme.border;
+            border-radius: 16px;
+
+            Rectangle {
+                x: 10px;
+                y: 10px;
+                width: 204px;
+                height: 162px;
+                border-radius: 12px;
+                background: root.theme.card2;
+                clip: true;
+
+                if root.has-cover-art : Image {
+                    width: 204px;
+                    height: 162px;
+                    source: root.cover-art;
+                    image-fit: cover;
+                }
+
+                if !root.has-cover-art : Rectangle {
+                    width: 204px;
+                    height: 162px;
+                    background: root.theme.card2;
+                    Rectangle {
+                        width: 72px;
+                        height: 72px;
+                        x: 66px;
+                        y: 45px;
+                        border-radius: 36px;
+                        border-width: 4px;
+                        border-color: root.theme.accent;
+                        Rectangle {
+                            width: 18px;
+                            height: 18px;
+                            x: 27px;
+                            y: 27px;
+                            border-radius: 9px;
+                            background: root.theme.accent;
+                        }
+                    }
+                }
+
+                // LIVE / PAUSE pill
+                Rectangle {
+                    x: 8px;
+                    y: 8px;
+                    height: 20px;
+                    width: st-lbl.preferred-width + 14px;
+                    border-radius: 10px;
+                    background: #00000099;
+                    st-lbl := Text {
+                        text: root.is-playing ? "● LIVE" : "❚❚ HOLD";
+                        color: #ffffff;
+                        font-size: 11px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Duration pill
+                Rectangle {
+                    x: 204px - dur-lbl.preferred-width - 22px;
+                    y: 8px;
+                    height: 20px;
+                    width: dur-lbl.preferred-width + 14px;
+                    border-radius: 10px;
+                    background: #00000099;
+                    dur-lbl := Text {
+                        text: root.now-duration;
+                        color: #ffffff;
+                        font-size: 11px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // 3-Line Synced Lyrics Card directly below Album Art
+        Rectangle {
+            vertical-stretch: 1;
+            background: root.theme.card;
+            border-width: 1px;
+            border-color: root.theme.border;
+            border-radius: 14px;
+
+            VerticalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                padding-top: 6px;
+                padding-bottom: 6px;
+                alignment: center;
+                spacing: 4px;
+
+                Text {
+                    height: 18px;
+                    text: root.lyric-prev;
+                    color: root.theme.muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                Text {
+                    height: 20px;
+                    text: root.lyric-curr;
+                    color: root.theme.accent;
+                    font-size: 12px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                Text {
+                    height: 18px;
+                    text: root.lyric-next;
+                    color: root.theme.muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Duration + Format/Bitrate + Play hint
+        HorizontalLayout {
+            padding-left: 4px;
+            padding-right: 4px;
+            Text {
+                text: root.now-elapsed + " / " + root.now-duration + " · " + root.now-format;
+                color: root.is-offline-now ? root.theme.ok : root.theme.muted;
+                font-size: 11px;
+                font-weight: 700;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Text {
+                text: root.is-playing ? "A: Pause" : "A: Play";
+                color: root.theme.accent;
+                font-size: 11px;
+                font-weight: 700;
+            }
+        }
+    }
+
+    // Right Column: Header + Fav/+List/DL Strip + Up Next + Playlist
+    VerticalLayout {
+        width: 362px;
+        spacing: 10px;
+
+        // Genre Pill + Seek Hint + Title + Artist
+        VerticalLayout {
+            min-width: 0px;
+            spacing: 3px;
+            HorizontalLayout {
+                spacing: 6px;
+                Rectangle {
+                    height: 22px;
+                    width: g-txt.preferred-width + 16px;
+                    border-radius: 11px;
+                    background: root.theme.accent;
+                    g-txt := Text {
+                        text: root.now-genre;
+                        color: root.theme.accent-fg;
+                        font-size: 11px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                if root.loop-track : Rectangle {
+                    height: 22px;
+                    width: lp-t.preferred-width + 12px;
+                    border-radius: 11px;
+                    border-width: 1px;
+                    border-color: root.theme.accent;
+                    background: root.theme.card;
+                    lp-t := Text {
+                        text: "⟳ LOOP";
+                        color: root.theme.accent;
+                        font-size: 10px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: "R-Stk: Artist · R3: Loop · SEL: Menu";
+                    color: root.theme.muted;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+            }
+            MarqueeText {
+                text: root.now-title;
+                text-color: root.theme.text;
+                font-size: 21px;
+                font-weight: 700;
+                active: root.active;
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                height: 22px;
+                Rectangle {
+                    horizontal-stretch: 0;
+                    width: min(210px, art-lbl.preferred-width + 16px);
+                    height: 22px;
+                    border-radius: 7px;
+                    background: root.now-artist-focused ? root.theme.accent : root.theme.card2;
+                    border-width: 1px;
+                    border-color: root.now-artist-focused ? root.theme.accent : root.theme.border;
+                    art-lbl := Text {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        text: root.now-artist + (root.now-artist-focused ? "  [A]" : "  ▸");
+                        color: root.now-artist-focused ? root.theme.accent-fg : root.theme.accent;
+                        font-size: 12px;
+                        font-weight: 700;
+                        overflow: elide;
+                        vertical-alignment: center;
+                    }
+                }
+                if root.now-album != "" : MarqueeText {
+                    horizontal-stretch: 1;
+                    text: root.now-album;
+                    text-color: root.theme.muted;
+                    font-size: 12px;
+                    font-weight: 600;
+                    active: root.active;
+                }
+            }
+        }
+
+        // Action Strip: Fav | + List | Download
+        HorizontalLayout {
+            spacing: 8px;
+            height: 32px;
+
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 10px;
+                border-width: 1px;
+                border-color: root.theme.border;
+                background: root.is-favorite-now ? root.theme.heart : root.theme.card;
+                Text {
+                    text: root.is-favorite-now ? "♥ Fav (X)" : "♡ Fav (X)";
+                    color: root.is-favorite-now ? #ffffff : root.theme.text;
+                    font-size: 12px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 10px;
+                border-width: 1px;
+                border-color: root.theme.border;
+                background: root.theme.card;
+                Text {
+                    text: "+ List (ST)";
+                    color: root.theme.text;
+                    font-size: 12px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 10px;
+                border-width: 1px;
+                border-color: root.theme.border;
+                background: root.is-offline-now ? root.theme.ok : root.theme.card;
+                Text {
+                    text: root.is-offline-now ? "✓ Saved (Y)" : "↓ DL (Y)";
+                    color: root.is-offline-now ? #0f172a : root.theme.text;
+                    font-size: 12px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Up Next Card
+        Rectangle {
+            height: 52px;
+            background: root.theme.card;
+            border-width: 1px;
+            border-color: root.theme.accent;
+            border-radius: 12px;
+
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 8px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    min-width: 0px;
+                    alignment: center;
+                    spacing: 2px;
+                    Text {
+                        text: "UP NEXT (TRACK 1)";
+                        color: root.theme.accent;
+                        font-size: 10px;
+                        font-weight: 700;
+                    }
+                    MarqueeText {
+                        text: root.next-artist == "" ? root.next-title : (root.next-title + " — " + root.next-artist);
+                        text-color: root.theme.text;
+                        font-size: 12px;
+                        font-weight: 700;
+                        active: root.active;
+                    }
+                }
+                if root.next-duration != "" : Text {
+                    text: root.next-duration;
+                    color: root.theme.muted;
+                    font-size: 12px;
+                    horizontal-stretch: 0;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Playlist / Queue Rows
+        Rectangle {
+            vertical-stretch: 1;
+            background: root.theme.card;
+            border-width: 1px;
+            border-color: root.theme.border;
+            border-radius: 14px;
+            clip: true;
+
+            VerticalLayout {
+                spacing: 0px;
+                Rectangle {
+                    height: 28px;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        Text {
+                            text: root.playlist-label;
+                            color: root.theme.muted;
+                            font-size: 10px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text {
+                            text: "▲/▼ Skip";
+                            color: root.theme.accent;
+                            font-size: 10px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Rectangle {
+                        x: 0px;
+                        y: 27px;
+                        width: parent.width;
+                        height: 1px;
+                        background: root.theme.border;
+                    }
+                }
+
+                for row[idx] in root.now-playlist-rows : Rectangle {
+                    height: 36px;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 8px;
+                        Text {
+                            text: (idx + 2) + ".";
+                            color: root.theme.muted;
+                            font-size: 11px;
+                            vertical-alignment: center;
+                        }
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            min-width: 0px;
+                            alignment: center;
+                            MarqueeText {
+                                text: row.title + " — " + row.artist;
+                                text-color: root.theme.text;
+                                font-size: 12px;
+                                font-weight: 600;
+                                active: root.active;
+                            }
+                        }
+                        if row.duration != "" : Text {
+                            text: row.duration;
+                            color: root.theme.muted;
+                            font-size: 11px;
+                            horizontal-stretch: 0;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Rectangle {
+                        x: 0px;
+                        y: 35px;
+                        width: parent.width;
+                        height: 1px;
+                        background: root.theme.border;
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,6 +1,6 @@
 [package]
 name = "rusttune"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 license = "MIT-0"
 repository = "https://github.com/dfrost16/rusttune"
@@ -15,6 +15,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 libloading = "0.9.0"
 ureq = { version = "2.12", default-features = false, features = ["tls", "json"] }
 symphonia = { version = "0.5", default-features = false, features = ["aac", "isomp4", "mp3", "pcm"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [build-dependencies]
 slint-build = "1.18.1"

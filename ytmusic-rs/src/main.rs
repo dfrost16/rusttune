@@ -1,4 +1,5 @@
 mod audio;
+mod catalog;
 mod db;
 mod innertube;
 mod input;
@@ -8,6 +9,7 @@ mod sdl2_platform;
 mod state;
 mod ui_sync;
 mod web_remote;
+mod workers;
 
 use audio::{start_stream_playback, AudioEvent};
 use db::save_settings;

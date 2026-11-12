@@ -1,0 +1,220 @@
+import { KeyboardGrid, MarqueeText, ThemeColors, TrackRow } from "types.slint";
+
+export component FindView inherits VerticalLayout {
+    in property <ThemeColors> theme;
+    in property <string> search-query;
+    in property <string> remote-url;
+    in property <bool> web-server-on;
+    in property <string> web-pin-label;
+    in property <int> find-zone;
+    in property <int> chip-index;
+    in property <[string]> suggest-chips;
+    in property <[TrackRow]> find-hits;
+    in property <int> find-hit-index;
+    in property <int> find-hit-scroll;
+    in property <int> key-row;
+    in property <int> key-col;
+    in property <bool> kbd-num-mode;
+    in property <[string]> qwerty-keys;
+    in property <[string]> num-keys;
+
+    padding: 14px;
+    spacing: 8px;
+
+    // Search Bar
+    Rectangle {
+        height: 36px;
+        background: root.theme.card;
+        border-width: 1px;
+        border-color: root.theme.accent;
+        border-radius: 10px;
+        HorizontalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            spacing: 8px;
+            Path {
+                width: 14px;
+                height: 14px;
+                y: 11px;
+                viewbox-x: 0; viewbox-y: 0; viewbox-width: 24; viewbox-height: 24;
+                commands: "M11 4a7 7 0 1 0 0 14 7 7 0 1 0 0-14z M21 21l-4.35-4.35";
+                stroke: root.theme.accent;
+                stroke-width: 2.2px;
+            }
+            Text {
+                text: root.search-query == "" ? "Type below or use Phone Remote..." : (root.search-query + "_");
+                color: root.search-query == "" ? root.theme.muted : root.theme.text;
+                font-size: 13px;
+                font-weight: 700;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Text {
+                text: root.web-server-on && root.web-pin-label != "OFF" && root.web-pin-label != ""
+                    ? (root.remote-url + "  ·  PIN " + root.web-pin-label)
+                    : root.remote-url;
+                color: root.theme.muted;
+                font-size: 10px;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // Autocomplete Suggestion Chips
+    HorizontalLayout {
+        height: 28px;
+        spacing: 6px;
+        Text {
+            text: root.search-query == "" ? "RECENT:" : "SUGGEST:";
+            color: root.theme.accent;
+            font-size: 11px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+        for chip[ci] in root.suggest-chips : Rectangle {
+            visible: ci < 4;
+            width: ch-t.preferred-width + 18px;
+            border-radius: 14px;
+            border-width: 1px;
+            border-color: (root.find-zone == 0 && root.chip-index == ci) ? root.theme.accent : root.theme.border;
+            background: (root.find-zone == 0 && root.chip-index == ci) ? root.theme.accent : root.theme.card;
+            ch-t := Text {
+                text: chip;
+                color: (root.find-zone == 0 && root.chip-index == ci) ? root.theme.accent-fg : root.theme.text;
+                font-size: 11px;
+                font-weight: 600;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // Live Results: 2 compact rows while typing, expands to 6 scrollable rows when browsing Hits
+    Rectangle {
+        height: root.find-zone == 1 ? 268px : 82px;
+        vertical-stretch: root.find-zone == 1 ? 1 : 0;
+        background: root.theme.card;
+        border-width: 1px;
+        border-color: root.find-zone == 1 ? root.theme.accent : root.theme.border;
+        border-radius: 12px;
+        clip: true;
+
+        if root.find-hits.length == 0 : Text {
+            text: root.search-query == "" ? "Start typing below or press GO to search YouTube Music..." : "Press GO on keyboard to search YouTube Music";
+            color: root.theme.muted;
+            font-size: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        for tr[hi] in root.find-hits : Rectangle {
+            property <bool> sel: (root.find-zone == 1 && root.find-hit-index == hi);
+            property <int> max-vis: root.find-zone == 1 ? 6 : 2;
+            visible: hi >= root.find-hit-scroll && (hi - root.find-hit-scroll) < max-vis;
+            x: 0px;
+            y: (hi - root.find-hit-scroll) * 44px;
+            width: parent.width;
+            height: 44px;
+            background: sel ? root.theme.card2 : transparent;
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 8px;
+                if tr.kind != "" : Rectangle {
+                    width: k-badge.preferred-width + 12px;
+                    height: 20px;
+                    y: 12px;
+                    border-radius: 6px;
+                    background: tr.kind == "ARTIST" ? root.theme.accent : root.theme.card2;
+                    border-width: 1px;
+                    border-color: root.theme.border;
+                    k-badge := Text {
+                        text: tr.kind;
+                        color: tr.kind == "ARTIST" ? root.theme.accent-fg : root.theme.accent;
+                        font-size: 10px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: 1px;
+                    MarqueeText {
+                        text: tr.kind == "" ? ("▶ " + tr.title) : tr.title;
+                        text-color: sel ? root.theme.accent : root.theme.text;
+                        font-size: 12px;
+                        font-weight: 700;
+                        active: sel;
+                    }
+                    if tr.artist != "" : MarqueeText {
+                        text: tr.album == "" ? tr.artist : (tr.artist + " · " + tr.album);
+                        text-color: root.theme.muted;
+                        font-size: 10px;
+                        font-weight: 600;
+                        active: sel;
+                    }
+                }
+                if !tr.is_artist : Text {
+                    text: tr.is_favorite ? "♥" : "♡";
+                    color: tr.is_favorite ? root.theme.heart : root.theme.muted;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+                if !tr.is_artist : Text {
+                    text: tr.is_offline ? "✓" : "↓";
+                    color: tr.is_offline ? root.theme.ok : root.theme.muted;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: tr.is_artist ? "Open ↗" : tr.duration;
+                    color: tr.is_artist ? root.theme.accent : root.theme.muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                x: 0px;
+                y: 43px;
+                width: parent.width;
+                height: 1px;
+                background: root.theme.border;
+            }
+        }
+    }
+
+    if root.find-zone == 1 : Text {
+        height: 20px;
+        text: "A: Open / Play   ·   R-Stick: Page   ·   B: Keyboard   ·   X: Fav   ·   Y: DL";
+        color: root.theme.muted;
+        font-size: 11px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    // Spacious Standard QWERTY / 123 Keyboard at Bottom
+    if root.find-zone != 1 : Rectangle {
+        vertical-stretch: 1;
+        background: root.theme.card;
+        border-width: 1px;
+        border-color: root.theme.border;
+        border-radius: 16px;
+
+        KeyboardGrid {
+            theme: root.theme;
+            qwerty-keys: root.qwerty-keys;
+            num-keys: root.num-keys;
+            kbd-num-mode: root.kbd-num-mode;
+            key-row: root.key-row;
+            key-col: root.key-col;
+            active: root.find-zone == 2;
+            key-radius: 10px;
+            key-font-size: 13px;
+            padding: 10px;
+            spacing: 6px;
+        }
+    }
+}

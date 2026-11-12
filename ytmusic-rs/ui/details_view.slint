@@ -1,0 +1,424 @@
+import { MarqueeText, ThemeColors, TrackListRow, TrackRow } from "types.slint";
+
+export component CollectionDetailView inherits VerticalLayout {
+    in property <ThemeColors> theme;
+    in property <string> active-tab;
+    in property <string> detail-title;
+    in property <string> detail-subtitle;
+    in property <string> detail-count-label;
+    in property <color> detail-accent;
+    in property <bool> detail-top-focused;
+    in property <image> detail-thumb;
+    in property <bool> has-detail-thumb;
+    in property <[TrackRow]> list-rows;
+    in property <int> list-index;
+    in property <int> list-scroll;
+
+    padding: 16px;
+    spacing: 10px;
+
+    Rectangle {
+        height: 58px;
+        background: root.theme.card;
+        border-width: 1px;
+        border-color: root.theme.border;
+        border-radius: 14px;
+
+        HorizontalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            spacing: 12px;
+
+            if root.has-detail-thumb : Rectangle {
+                width: 40px;
+                height: 40px;
+                y: 9px;
+                border-radius: root.active-tab == "artist_detail" ? 20px : 8px;
+                clip: true;
+                Image {
+                    width: 40px;
+                    height: 40px;
+                    source: root.detail-thumb;
+                    image-fit: cover;
+                }
+            }
+            if !root.has-detail-thumb : Rectangle {
+                width: 6px;
+                height: 34px;
+                y: 12px;
+                border-radius: 3px;
+                background: root.detail-accent;
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: 2px;
+                Text {
+                    text: root.detail-title;
+                    color: root.theme.text;
+                    font-size: 16px;
+                    font-weight: 700;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.detail-subtitle;
+                    color: root.theme.muted;
+                    font-size: 11px;
+                    overflow: elide;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                spacing: 4px;
+                Text {
+                    text: root.detail-count-label;
+                    color: root.theme.muted;
+                    font-size: 10px;
+                    font-weight: 700;
+                    horizontal-alignment: right;
+                }
+                Rectangle {
+                    height: 22px;
+                    width: dl-all-t.preferred-width + 14px;
+                    border-radius: 7px;
+                    border-width: 1px;
+                    border-color: root.detail-top-focused ? root.theme.accent : root.theme.border;
+                    background: root.detail-top-focused ? root.theme.accent : root.theme.card2;
+                    dl-all-t := Text {
+                        text: "↓ Download All";
+                        color: root.detail-top-focused ? root.theme.accent-fg : root.theme.text;
+                        font-size: 10px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        vertical-stretch: 1;
+        background: root.theme.card;
+        border-width: 1px;
+        border-color: root.theme.border;
+        border-radius: 16px;
+        clip: true;
+
+        if root.list-rows.length == 0 : Text {
+            text: "Loading tracks...";
+            color: root.theme.muted;
+            font-size: 13px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        for tr[idx] in root.list-rows : TrackListRow {
+            width: parent.width;
+            theme: root.theme;
+            tr: tr;
+            idx: idx;
+            list-index: root.list-index;
+            list-scroll: root.list-scroll;
+            detail-top-focused: root.detail-top-focused;
+            show-playing-prefix: true;
+        }
+    }
+
+    Text {
+        text: "A: Play  ·  X: Fav  ·  Y: Download  ·  ▲ Top: DL All  ·  B: Back";
+        color: root.theme.muted;
+        font-size: 11px;
+        horizontal-alignment: center;
+    }
+}
+
+export component ArtistDetailView inherits VerticalLayout {
+    in property <ThemeColors> theme;
+    in property <bool> active;
+    in property <string> artist-kicker;
+    in property <string> detail-title;
+    in property <string> artist-stats;
+    in property <string> detail-count-label;
+    in property <color> detail-accent;
+    in property <bool> detail-is-fav;
+    in property <bool> detail-top-focused;
+    in property <image> detail-thumb;
+    in property <bool> has-detail-thumb;
+    in property <int> artist-section;
+    in property <int> artist-songs-count;
+    in property <int> artist-albums-count;
+    in property <int> artist-singles-count;
+    in property <[TrackRow]> list-rows;
+    in property <int> list-index;
+    in property <int> list-scroll;
+
+    padding: 14px;
+    spacing: 9px;
+
+    // Hero Header Card
+    Rectangle {
+        height: 76px;
+        background: root.theme.card;
+        border-width: 1px;
+        border-color: root.theme.border;
+        border-radius: 16px;
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 12px;
+
+            Rectangle {
+                width: 54px;
+                height: 54px;
+                y: 11px;
+                border-radius: 27px;
+                border-width: 2px;
+                border-color: root.theme.accent;
+                background: root.detail-accent;
+                clip: true;
+                if root.has-detail-thumb : Image {
+                    width: 54px;
+                    height: 54px;
+                    source: root.detail-thumb;
+                    image-fit: cover;
+                }
+                if !root.has-detail-thumb : Text {
+                    text: "♪";
+                    color: #ffffff;
+                    font-size: 20px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: 2px;
+                Text {
+                    text: root.artist-kicker;
+                    color: root.theme.accent;
+                    font-size: 10px;
+                    font-weight: 700;
+                    letter-spacing: 0.6px;
+                }
+                MarqueeText {
+                    text: root.detail-title;
+                    text-color: root.theme.text;
+                    font-size: 18px;
+                    font-weight: 700;
+                    active: root.active;
+                }
+                Text {
+                    text: root.artist-stats;
+                    color: root.theme.muted;
+                    font-size: 11px;
+                    overflow: elide;
+                }
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                if root.artist-section == 0 : Rectangle {
+                    height: 28px;
+                    y: 24px;
+                    width: adl-t.preferred-width + 16px;
+                    border-radius: 9px;
+                    border-width: 1px;
+                    border-color: root.detail-top-focused ? root.theme.accent : root.theme.border;
+                    background: root.detail-top-focused ? root.theme.accent : root.theme.card2;
+                    adl-t := Text {
+                        text: "↓ DL All";
+                        color: root.detail-top-focused ? root.theme.accent-fg : root.theme.text;
+                        font-size: 11px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    height: 28px;
+                    y: 24px;
+                    width: fav-chip-t.preferred-width + 18px;
+                    border-radius: 9px;
+                    border-width: 1px;
+                    border-color: root.detail-is-fav ? root.theme.heart : root.theme.border;
+                    background: root.detail-is-fav ? root.theme.heart : root.theme.card2;
+                    fav-chip-t := Text {
+                        text: root.detail-is-fav ? "♥ Saved" : "♡ Fav";
+                        color: root.detail-is-fav ? #ffffff : root.theme.text;
+                        font-size: 11px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+
+    // Section Tabs: Top Songs | Albums | Singles & EPs
+    HorizontalLayout {
+        height: 28px;
+        spacing: 7px;
+        for sec[si] in [
+            { label: "Top Songs (" + root.artist-songs-count + ")" },
+            { label: "Albums (" + root.artist-albums-count + ")" },
+            { label: "Singles (" + root.artist-singles-count + ")" },
+        ] : Rectangle {
+            width: sec-lbl.preferred-width + 20px;
+            border-radius: 9px;
+            border-width: 1px;
+            border-color: root.artist-section == si ? root.theme.accent : root.theme.border;
+            background: root.artist-section == si ? root.theme.accent : root.theme.card;
+            sec-lbl := Text {
+                text: sec.label;
+                color: root.artist-section == si ? root.theme.accent-fg : root.theme.muted;
+                font-size: 11px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Text {
+            text: "◀/▶ Tab · " + root.detail-count-label;
+            color: root.theme.muted;
+            font-size: 11px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+    }
+
+    // 5-Row Scrollable Artist Content List
+    Rectangle {
+        vertical-stretch: 1;
+        background: root.theme.card;
+        border-width: 1px;
+        border-color: root.theme.border;
+        border-radius: 15px;
+        clip: true;
+
+        if root.list-rows.length == 0 : Text {
+            text: root.artist-section == 0 ? "Loading Top Songs..." : (root.artist-section == 1 ? "No Albums listed" : "No Singles listed");
+            color: root.theme.muted;
+            font-size: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        for tr[idx] in root.list-rows : Rectangle {
+            property <bool> sel: !root.detail-top-focused && root.list-index == idx;
+            x: 0px;
+            y: (idx - root.list-scroll) * 48px;
+            width: parent.width;
+            height: 48px;
+            visible: idx >= root.list-scroll && (idx - root.list-scroll) < 5;
+            background: sel ? root.theme.card2 : transparent;
+
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 10px;
+                if root.artist-section == 0 : Text {
+                    width: 20px;
+                    text: (idx + 1);
+                    color: sel ? root.theme.accent : root.theme.muted;
+                    font-size: 11px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                if root.artist-section != 0 : Rectangle {
+                    width: 34px;
+                    height: 34px;
+                    y: 7px;
+                    border-radius: 7px;
+                    background: root.detail-accent;
+                    clip: true;
+                    if tr.has_thumb : Image {
+                        width: 34px;
+                        height: 34px;
+                        source: tr.thumb;
+                        image-fit: cover;
+                    }
+                    if !tr.has_thumb : Text {
+                        text: "LP";
+                        color: #ffffff;
+                        font-size: 10px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: 1px;
+                    MarqueeText {
+                        text: (tr.is_playing ? "▶ " : "") + tr.title;
+                        text-color: sel ? root.theme.accent : root.theme.text;
+                        font-size: 12px;
+                        font-weight: 700;
+                        active: sel;
+                    }
+                    MarqueeText {
+                        text: tr.album == "" ? tr.artist : (tr.artist + " · " + tr.album);
+                        text-color: root.theme.muted;
+                        font-size: 10px;
+                        font-weight: 600;
+                        active: sel;
+                    }
+                }
+                if root.artist-section == 0 : Text {
+                    text: tr.is_favorite ? "♥" : "♡";
+                    color: tr.is_favorite ? root.theme.heart : root.theme.muted;
+                    font-size: 12px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                if root.artist-section == 0 : Text {
+                    text: tr.is_offline ? "✓" : "↓";
+                    color: tr.is_offline ? root.theme.ok : root.theme.muted;
+                    font-size: 12px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.artist-section == 0 ? tr.duration : "Open ↗";
+                    color: root.artist-section == 0 ? root.theme.muted : root.theme.accent;
+                    font-size: 11px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                x: 0px;
+                y: 47px;
+                width: parent.width;
+                height: 1px;
+                background: root.theme.border;
+            }
+        }
+    }
+
+    HorizontalLayout {
+        height: 16px;
+        Text {
+            text: root.artist-section == 0 ? "A: Play · X: ♥ Track · Y: ↓ DL · ▲ Top: DL All" : "A: Open Release · X: ♥ Artist · R-Stick: Page";
+            color: root.theme.muted;
+            font-size: 10px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Text {
+            text: "◀/▶ Section · B: Back";
+            color: root.theme.accent;
+            font-size: 10px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+    }
+}

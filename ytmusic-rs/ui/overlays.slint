@@ -1,0 +1,612 @@
+import { GridCard, KeyboardGrid, PlaylistRow, ThemeColors } from "types.slint";
+
+export component GridKeyboardModal inherits Rectangle {
+    in property <ThemeColors> theme;
+    in property <string> active-tab;
+    in property <string> grid-kbd-title;
+    in property <string> vibe-filter;
+    in property <string> lib-filter;
+    in property <string> artist-filter;
+    in property <[GridCard]> grid-kbd-previews;
+    in property <[string]> qwerty-keys;
+    in property <[string]> num-keys;
+    in property <bool> kbd-num-mode;
+    in property <int> key-row;
+    in property <int> key-col;
+
+    width: 640px;
+    height: 480px;
+    background: #000000aa;
+
+    Rectangle {
+        x: 40px;
+        y: 94px;
+        width: 560px;
+        height: 292px;
+        background: root.theme.card;
+        border-width: 1px;
+        border-color: root.theme.accent;
+        border-radius: 16px;
+
+        VerticalLayout {
+            padding: 14px;
+            spacing: 7px;
+            HorizontalLayout {
+                Text {
+                    text: root.grid-kbd-title;
+                    color: root.theme.accent;
+                    font-size: 12px;
+                    font-weight: 700;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: "B: Close   ·   GO: Search YT Music";
+                    color: root.theme.muted;
+                    font-size: 11px;
+                }
+            }
+            Rectangle {
+                height: 32px;
+                background: root.theme.dock;
+                border-width: 1px;
+                border-color: root.theme.border;
+                border-radius: 10px;
+                Text {
+                    x: 12px;
+                    text: (root.active-tab == "vibes" ? root.vibe-filter : (root.active-tab == "lib" ? root.lib-filter : root.artist-filter)) + "_";
+                    color: root.theme.text;
+                    font-size: 13px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+            if root.grid-kbd-previews.length > 0 : HorizontalLayout {
+                height: 28px;
+                spacing: 6px;
+                for pv[pi] in root.grid-kbd-previews : Rectangle {
+                    visible: pi < 3;
+                    width: pv-t.preferred-width + 32px;
+                    border-radius: 10px;
+                    background: root.theme.card2;
+                    border-width: 1px;
+                    border-color: root.theme.border;
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 8px;
+                        spacing: 6px;
+                        Rectangle {
+                            width: 18px;
+                            height: 18px;
+                            y: 5px;
+                            border-radius: 9px;
+                            background: pv.accent;
+                            clip: true;
+                            if pv.has_thumb : Image {
+                                width: 18px;
+                                height: 18px;
+                                source: pv.thumb;
+                                image-fit: cover;
+                            }
+                            if !pv.has_thumb : Text {
+                                text: pv.initial;
+                                color: #ffffff;
+                                font-size: 9px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                        pv-t := Text {
+                            text: pv.title;
+                            color: root.theme.text;
+                            font-size: 11px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+            KeyboardGrid {
+                vertical-stretch: 1;
+                theme: root.theme;
+                qwerty-keys: root.qwerty-keys;
+                num-keys: root.num-keys;
+                kbd-num-mode: root.kbd-num-mode;
+                key-row: root.key-row;
+                key-col: root.key-col;
+                active: true;
+                key-radius: 8px;
+                key-font-size: 12px;
+                spacing: 5px;
+            }
+        }
+    }
+}
+
+export component PlaylistModal inherits Rectangle {
+    in property <ThemeColors> theme;
+    in property <[PlaylistRow]> playlists;
+    in property <int> pl-modal-index;
+
+    width: 640px;
+    height: 480px;
+    background: #000000aa;
+
+    Rectangle {
+        x: 160px;
+        y: 110px;
+        width: 320px;
+        height: 260px;
+        background: root.theme.card;
+        border-width: 1px;
+        border-color: root.theme.accent;
+        border-radius: 16px;
+
+        VerticalLayout {
+            padding: 16px;
+            spacing: 8px;
+            HorizontalLayout {
+                Text {
+                    text: "ADD TO PLAYLIST";
+                    color: root.theme.accent;
+                    font-size: 12px;
+                    font-weight: 700;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: "B / SEL: Close";
+                    color: root.theme.muted;
+                    font-size: 11px;
+                }
+            }
+            for pl[pi] in root.playlists : Rectangle {
+                height: 36px;
+                border-radius: 10px;
+                border-width: 1px;
+                border-color: root.pl-modal-index == pi ? root.theme.accent : root.theme.border;
+                background: root.pl-modal-index == pi ? root.theme.card2 : root.theme.dock;
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    Text {
+                        text: pl.name + " (" + pl.count_label + ")";
+                        color: root.theme.text;
+                        font-size: 12px;
+                        font-weight: 700;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: pl.contains_target ? "✓ Added" : "+ Add";
+                        color: pl.contains_target ? root.theme.ok : root.theme.muted;
+                        font-size: 12px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+            Rectangle {
+                height: 36px;
+                border-radius: 10px;
+                border-width: 1px;
+                border-color: root.pl-modal-index == root.playlists.length ? root.theme.accent : root.theme.border;
+                background: root.pl-modal-index == root.playlists.length ? root.theme.card2 : transparent;
+                Text {
+                    x: 12px;
+                    text: "+ New Playlist";
+                    color: root.theme.text;
+                    font-size: 12px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+
+export component SettingsModal inherits Rectangle {
+    in property <ThemeColors> theme;
+    in property <int> settings-index;
+    in property <string> theme-label;
+    in property <bool> loop-track;
+    in property <bool> radio-autoplay;
+    in property <bool> swap-ab;
+    in property <bool> web-server-on;
+    in property <string> remote-url;
+    in property <string> web-pin-label;
+
+    width: 640px;
+    height: 480px;
+    background: #000000aa;
+
+    Rectangle {
+        x: 150px;
+        y: 52px;
+        width: 340px;
+        height: 376px;
+        background: root.theme.card;
+        border-width: 1px;
+        border-color: root.theme.accent;
+        border-radius: 16px;
+
+        VerticalLayout {
+            padding: 18px;
+            spacing: 8px;
+            HorizontalLayout {
+                Text {
+                    text: "SETTINGS";
+                    color: root.theme.accent;
+                    font-size: 12px;
+                    font-weight: 700;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: "B / SEL: Close";
+                    color: root.theme.muted;
+                    font-size: 11px;
+                }
+            }
+            for opt[i] in [
+                { label: "Theme", val: root.theme-label },
+                { label: "Loop Current Song", val: root.loop-track ? "ON" : "OFF" },
+                { label: "Radio Autoplay", val: root.radio-autoplay ? "ON" : "OFF" },
+                { label: "Swap A / B", val: root.swap-ab ? "ON" : "OFF" },
+                { label: "Local Web Server", val: root.web-server-on ? root.remote-url : "OFF" },
+                { label: "Web Security PIN (X: New)", val: root.web-pin-label },
+                { label: "Quit App", val: "" },
+            ] : Rectangle {
+                height: 38px;
+                border-radius: 10px;
+                border-width: 1px;
+                border-color: root.settings-index == i ? root.theme.accent : root.theme.border;
+                background: root.settings-index == i ? root.theme.card2 : root.theme.dock;
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    Text {
+                        text: opt.label;
+                        color: root.theme.text;
+                        font-size: 13px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    Text {
+                        text: opt.val;
+                        color: root.theme.accent;
+                        font-size: 12px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component ConfirmModal inherits Rectangle {
+    in property <ThemeColors> theme;
+    in property <string> confirm-title;
+    in property <string> confirm-body;
+    in property <string> confirm-yes-label;
+
+    width: 640px;
+    height: 480px;
+    background: #000000b8;
+
+    Rectangle {
+        x: 140px;
+        y: 145px;
+        width: 360px;
+        height: 170px;
+        background: root.theme.card;
+        border-width: 1.5px;
+        border-color: root.theme.accent;
+        border-radius: 16px;
+
+        VerticalLayout {
+            padding: 18px;
+            spacing: 10px;
+            Text {
+                text: root.confirm-title;
+                color: root.theme.accent;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            Text {
+                text: root.confirm-body;
+                color: root.theme.text;
+                font-size: 13px;
+                wrap: word-wrap;
+                vertical-stretch: 1;
+            }
+            HorizontalLayout {
+                spacing: 10px;
+                height: 34px;
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 10px;
+                    background: root.theme.accent;
+                    Text {
+                        text: "A: " + root.confirm-yes-label;
+                        color: root.theme.accent-fg;
+                        font-size: 12px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 10px;
+                    border-width: 1px;
+                    border-color: root.theme.border;
+                    background: root.theme.card2;
+                    Text {
+                        text: "B: Cancel";
+                        color: root.theme.text;
+                        font-size: 12px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component ToastBanner inherits Rectangle {
+    in property <ThemeColors> theme;
+    in property <string> toast-text;
+
+    x: 376px;
+    y: 12px;
+    width: 248px;
+    height: 30px;
+    border-radius: 15px;
+    background: root.theme.card2;
+    border-width: 1px;
+    border-color: root.theme.accent;
+    Text {
+        text: root.toast-text;
+        color: root.theme.text;
+        font-size: 11px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
+component SolariFlap inherits Rectangle {
+    in property <string> digit;
+    in property <bool> light-mode: false;
+
+    width: 114px;
+    height: 150px;
+    border-radius: 15px;
+    border-width: 1.5px;
+    border-color: root.light-mode ? #cbc3b2 : #343842;
+    clip: true;
+
+    // Upper flap half
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height / 2;
+        background: root.light-mode
+            ? @linear-gradient(180deg, #fcfaf5 0%, #f2ede3 100%)
+            : @linear-gradient(180deg, #2b2e35 0%, #22252b 100%);
+    }
+
+    // Lower flap half
+    Rectangle {
+        x: 0px;
+        y: parent.height / 2;
+        width: parent.width;
+        height: parent.height / 2;
+        background: root.light-mode
+            ? @linear-gradient(180deg, #f4efe6 0%, #e5dfd1 100%)
+            : @linear-gradient(180deg, #1c1e24 0%, #16181c 100%);
+    }
+
+    // Flap numeral
+    Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.digit;
+        color: root.light-mode ? #18181b : #ffffff;
+        font-size: 86px;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    // Center mechanical split seam
+    Rectangle {
+        x: 0px;
+        y: parent.height / 2 - 1px;
+        width: parent.width;
+        height: 2px;
+        background: root.light-mode ? #b5ad9d : #0a0b0d;
+    }
+
+    // Left and right hinge pins
+    Rectangle {
+        x: 4px;
+        y: parent.height / 2 - 5px;
+        width: 3px;
+        height: 10px;
+        border-radius: 1px;
+        background: root.light-mode ? #8a8274 : #525763;
+    }
+    Rectangle {
+        x: parent.width - 7px;
+        y: parent.height / 2 - 5px;
+        width: 3px;
+        height: 10px;
+        border-radius: 1px;
+        background: root.light-mode ? #8a8274 : #525763;
+    }
+}
+
+export component PocketLockOverlay inherits Rectangle {
+    in property <bool> light-mode: false;
+    in property <string> clock-h1: "0";
+    in property <string> clock-h2: "0";
+    in property <string> clock-m1: "0";
+    in property <string> clock-m2: "0";
+    in property <string> battery-label: "84%";
+    in property <float> battery-pct: 0.84;
+    in property <string> now-title;
+    in property <float> now-progress;
+    in property <string> now-elapsed;
+    in property <string> now-duration;
+
+    property <color> fg: root.light-mode ? #18181b : #fafaf9;
+    property <color> time-fg: root.light-mode ? #57534e : #a8a29e;
+    property <color> accent: root.light-mode ? #d97706 : #fbbf24;
+    property <color> rail-bg: root.light-mode ? #d6cebe : #262932;
+
+    width: 640px;
+    height: 480px;
+    background: root.light-mode ? #ece6d9 : #131418;
+
+    VerticalLayout {
+        padding-top: 30px;
+        padding-bottom: 30px;
+        padding-left: 38px;
+        padding-right: 38px;
+
+        // Top-right battery indicator
+        HorizontalLayout {
+            height: 20px;
+            alignment: end;
+            spacing: 8px;
+
+            // Battery icon
+            Rectangle {
+                width: 29px;
+                height: 20px;
+                Rectangle {
+                    x: 0px;
+                    y: 3.5px;
+                    width: 26px;
+                    height: 13px;
+                    border-radius: 3px;
+                    border-width: 1.5px;
+                    border-color: root.light-mode ? #78716c : #57534e;
+                    Rectangle {
+                        x: 2.5px;
+                        y: 2.5px;
+                        height: 8px;
+                        width: 21px * max(0.0, min(1.0, root.battery-pct));
+                        border-radius: 1px;
+                        background: root.accent;
+                    }
+                }
+                Rectangle {
+                    x: 26.5px;
+                    y: 7px;
+                    width: 2.5px;
+                    height: 6px;
+                    border-radius: 1px;
+                    background: root.light-mode ? #78716c : #57534e;
+                }
+            }
+
+            Text {
+                text: root.battery-label;
+                color: root.time-fg;
+                font-size: 13px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        // Hero Solari split-flap clock
+        HorizontalLayout {
+            height: 150px;
+            alignment: center;
+            spacing: 14px;
+
+            SolariFlap { digit: root.clock-h1; light-mode: root.light-mode; }
+            SolariFlap { digit: root.clock-h2; light-mode: root.light-mode; }
+
+            Text {
+                text: ":";
+                color: root.accent;
+                font-size: 64px;
+                font-weight: 800;
+                vertical-alignment: center;
+            }
+
+            SolariFlap { digit: root.clock-m1; light-mode: root.light-mode; }
+            SolariFlap { digit: root.clock-m2; light-mode: root.light-mode; }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        // Bottom track name + time + seek bar
+        VerticalLayout {
+            spacing: 11px;
+
+            Text {
+                text: root.now-title;
+                color: root.fg;
+                font-size: 23px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+
+            HorizontalLayout {
+                height: 18px;
+                spacing: 14px;
+
+                Text {
+                    text: root.now-elapsed;
+                    color: root.time-fg;
+                    font-size: 13px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 18px;
+                    Rectangle {
+                        x: 0px;
+                        y: 6px;
+                        width: parent.width;
+                        height: 6px;
+                        border-radius: 3px;
+                        background: root.rail-bg;
+                        clip: true;
+
+                        Rectangle {
+                            x: 0px;
+                            y: 0px;
+                            height: 6px;
+                            border-radius: 3px;
+                            width: parent.width * max(0.0, min(1.0, root.now-progress));
+                            background: root.accent;
+                        }
+                    }
+                }
+
+                Text {
+                    text: root.now-duration;
+                    color: root.time-fg;
+                    font-size: 13px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

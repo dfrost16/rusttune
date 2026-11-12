@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Build clean PortMaster zip package (dist/ytmusic.zip) and artwork assets."""
+"""Build clean PortMaster zip package (dist/rusttune.zip), SHA-256 checksum, and artwork assets."""
 
 from __future__ import annotations
 
+import hashlib
 import math
 import struct
 import zipfile
@@ -129,6 +130,16 @@ def verify_zip(out_zip: Path) -> None:
             raise RuntimeError(f"Release zip missing required entries: {missing}")
 
 
+def write_sha256(out_zip: Path) -> tuple[Path, str]:
+    """Write standard `<digest>  <filename>` SHA-256 checksum file next to the archive."""
+    digest = hashlib.sha256(out_zip.read_bytes()).hexdigest()
+    sha_path = out_zip.with_name(f"{out_zip.name}.sha256")
+    sha_path.write_text(f"{digest}  {out_zip.name}\n", encoding="utf-8")
+    return sha_path, digest
+
+
 if __name__ == "__main__":
     out = build_zip()
+    sha_file, digest = write_sha256(out)
     print(f"Built PortMaster package: {out} ({out.stat().st_size // 1024} KB)")
+    print(f"SHA-256 ({sha_file.name}): {digest}")

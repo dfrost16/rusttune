@@ -165,11 +165,38 @@ impl WebRemote {
         innertube: Arc<Innertube>,
         pin_enabled: bool,
     ) -> Option<Self> {
-        let addr = format!("0.0.0.0:{port}");
-        let listener = TcpListener::bind(&addr).ok()?;
+        Self::start_bound(&format!("0.0.0.0:{port}"), None, db_path, cache_dir, innertube, pin_enabled)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn start_test(
+        db_path: PathBuf,
+        cache_dir: PathBuf,
+        pin_enabled: bool,
+    ) -> Option<Self> {
+        Self::start_bound(
+            "127.0.0.1:0",
+            Some("127.0.0.1"),
+            db_path,
+            cache_dir,
+            Arc::new(Innertube::new_empty_for_test()),
+            pin_enabled,
+        )
+    }
+
+    fn start_bound(
+        bind_addr: &str,
+        host_override: Option<&str>,
+        db_path: PathBuf,
+        cache_dir: PathBuf,
+        innertube: Arc<Innertube>,
+        pin_enabled: bool,
+    ) -> Option<Self> {
+        let listener = TcpListener::bind(bind_addr).ok()?;
+        let bound_port = listener.local_addr().ok()?.port();
         let _ = listener.set_nonblocking(true);
 
-        let ip = get_local_ip();
+        let ip = host_override.map(str::to_string).unwrap_or_else(get_local_ip);
         let snapshot = Arc::new(Mutex::new(RemoteSnapshot::default()));
         let (tx, rx) = mpsc::sync_channel(64);
         let stop_flag = Arc::new(AtomicBool::new(false));
@@ -222,7 +249,7 @@ impl WebRemote {
         });
 
         Some(Self {
-            url: format!("http://{ip}:{port}"),
+            url: format!("http://{ip}:{bound_port}"),
             snapshot,
             rx,
             stop_flag,
@@ -952,11 +979,267 @@ fn hex(c: u8) -> Option<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_dirs(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("rusttune_web_{tag}_{nanos}"));
+        let cache = root.join("cache");
+        let _ = std::fs::create_dir_all(&cache);
+        let db_path = root.join("music.db");
+        (root, db_path, cache)
+    }
+
+    fn http_req(
+        srv: &WebRemote,
+        method: &str,
+        path: &str,
+        extra_headers: &[(&str, &str)],
+        body: &[u8],
+    ) -> (u16, String, Vec<u8>) {
+        let addr = srv.url.strip_prefix("http://").unwrap();
+        let mut raw = format!("{method} {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n");
+        for (k, v) in extra_headers {
+            raw.push_str(&format!("{k}: {v}\r\n"));
+        }
+        raw.push_str(&format!("Content-Length: {}\r\n\r\n", body.len()));
+
+        let mut stream = TcpStream::connect(addr).expect("connect loopback web server");
+        stream.set_read_timeout(Some(Duration::from_secs(3))).ok();
+        stream.write_all(raw.as_bytes()).unwrap();
+        stream.write_all(body).unwrap();
+        stream.flush().unwrap();
+
+        let mut buf = Vec::new();
+        stream.read_to_end(&mut buf).unwrap();
+        let split = buf
+            .windows(4)
+            .position(|w| w == b"\r\n\r\n")
+            .expect("HTTP header separator");
+        let head = String::from_utf8_lossy(&buf[..split]).to_string();
+        let status = head
+            .lines()
+            .next()
+            .and_then(|l| l.split_whitespace().nth(1))
+            .and_then(|c| c.parse::<u16>().ok())
+            .unwrap_or(0);
+        let resp_body = buf[split + 4..].to_vec();
+        (status, head, resp_body)
+    }
 
     #[test]
     fn generates_valid_6_digit_pin() {
         let pin = generate_random_6_digit_pin();
         assert_eq!(pin.len(), 6);
         assert!(pin.chars().all(|c| c.is_ascii_digit()));
+    }
+
+    #[test]
+    fn auth_flow_gates_endpoints_and_rate_limits_wrong_pins() {
+        let (root, db_path, cache) = test_dirs("auth");
+        let srv = WebRemote::start_test(db_path, cache, true).expect("start test server");
+
+        let (code, _, body) = http_req(&srv, "GET", "/api/auth/status", &[], b"");
+        assert_eq!(code, 200);
+        let st: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(st["pin_required"], true);
+        assert_eq!(st["authenticated"], false);
+
+        assert_eq!(http_req(&srv, "GET", "/api/status", &[], b"").0, 401);
+        assert_eq!(http_req(&srv, "GET", "/api/playlists", &[], b"").0, 401);
+
+        // 5 failed attempts trigger a 30s lockout on the 6th attempt.
+        for _ in 0..5 {
+            let (c, _, _) = http_req(
+                &srv,
+                "POST",
+                "/api/auth/verify",
+                &[("Content-Type", "application/json")],
+                br#"{"pin":"0000000"}"#,
+            );
+            assert_eq!(c, 401);
+        }
+        let (locked_code, _, _) = http_req(
+            &srv,
+            "POST",
+            "/api/auth/verify",
+            &[("Content-Type", "application/json")],
+            br#"{"pin":"0000000"}"#,
+        );
+        assert_eq!(locked_code, 429);
+
+        // Rotating PIN resets lockout and authorizes with both Bearer token and session cookie.
+        let valid_pin = srv.rotate_pin();
+        let payload = format!(r#"{{"pin":"{valid_pin}"}}"#);
+        let (ok_code, head, ok_body) = http_req(
+            &srv,
+            "POST",
+            "/api/auth/verify",
+            &[("Content-Type", "application/json")],
+            payload.as_bytes(),
+        );
+        assert_eq!(ok_code, 200);
+        assert!(head.contains("ytm_session="));
+        let ok_json: serde_json::Value = serde_json::from_slice(&ok_body).unwrap();
+        let token = ok_json["token"].as_str().unwrap();
+
+        let bearer = format!("Bearer {token}");
+        assert_eq!(
+            http_req(&srv, "GET", "/api/status", &[("Authorization", &bearer)], b"").0,
+            200
+        );
+        let cookie = format!("ytm_session={token}");
+        assert_eq!(
+            http_req(&srv, "GET", "/api/playlists", &[("Cookie", &cookie)], b"").0,
+            200
+        );
+
+        srv.shutdown();
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn playlist_crud_and_orphan_cleanup_over_http() {
+        let (root, db_path, cache) = test_dirs("crud");
+        let db = MusicDb::open(&db_path, &cache).unwrap();
+
+        // Seed 2 cached offline tracks: v_keep (added to playlist) and v_orphan (unreferenced).
+        let keep_file = cache.join("v_keep.m4a");
+        let orphan_file = cache.join("v_orphan.m4a");
+        std::fs::write(&keep_file, b"keep-audio").unwrap();
+        std::fs::write(&orphan_file, b"orphan-audio-123").unwrap();
+        let t_keep = TrackMeta {
+            video_id: "v_keep".into(),
+            title: "Keep Track".into(),
+            artist: "Artist A".into(),
+            album: String::new(),
+            duration_secs: 120,
+            thumb_url: String::new(),
+            local_path: None,
+            file_bytes: 0,
+            is_favorite: false,
+        };
+        let t_orphan = TrackMeta {
+            video_id: "v_orphan".into(),
+            title: "Orphan Track".into(),
+            artist: "Artist B".into(),
+            album: String::new(),
+            duration_secs: 90,
+            thumb_url: String::new(),
+            local_path: None,
+            file_bytes: 0,
+            is_favorite: false,
+        };
+        db.upsert_track(&t_keep, false);
+        db.upsert_track(&t_orphan, false);
+        db.set_offline(&t_keep, Some(&keep_file.to_string_lossy()), 10);
+        db.set_offline(&t_orphan, Some(&orphan_file.to_string_lossy()), 16);
+
+        let srv = WebRemote::start_test(db_path.clone(), cache.clone(), false).expect("start test server");
+
+        // Create playlist & verify listing
+        let (c, _, body) = http_req(
+            &srv,
+            "POST",
+            "/api/playlists",
+            &[("Content-Type", "application/json")],
+            br#"{"name":"Synth Mix"}"#,
+        );
+        assert_eq!(c, 200);
+        let pl_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["id"]
+            .as_i64()
+            .unwrap();
+        db.toggle_track_in_playlist(pl_id, &t_keep);
+
+        // Rename playlist
+        let (c_ren, _, _) = http_req(
+            &srv,
+            "PATCH",
+            &format!("/api/playlists/{pl_id}"),
+            &[("Content-Type", "application/json")],
+            br#"{"name":"Night Drive"}"#,
+        );
+        assert_eq!(c_ren, 200);
+        let (_, _, list_body) = http_req(&srv, "GET", "/api/playlists", &[], b"");
+        let list: serde_json::Value = serde_json::from_slice(&list_body).unwrap();
+        let entry = list
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["id"].as_i64() == Some(pl_id))
+            .expect("created playlist in list");
+        assert_eq!(entry["name"], "Night Drive");
+        assert_eq!(entry["track_count"], 1);
+
+        // Clean orphans removes v_orphan while keeping v_keep
+        let (c_cln, _, cln_body) = http_req(&srv, "POST", "/api/files/clean-orphans", &[], b"");
+        assert_eq!(c_cln, 200);
+        let cln_json: serde_json::Value = serde_json::from_slice(&cln_body).unwrap();
+        assert_eq!(cln_json["removed"], 1);
+        assert_eq!(cln_json["freed_bytes"], 16);
+        assert!(!orphan_file.exists());
+        assert!(keep_file.exists());
+
+        // Bulk delete removes v_keep file as well
+        let (c_bulk, _, bulk_body) = http_req(
+            &srv,
+            "POST",
+            "/api/files/bulk-delete",
+            &[("Content-Type", "application/json")],
+            br#"{"video_ids":["v_keep"]}"#,
+        );
+        assert_eq!(c_bulk, 200);
+        let bulk_json: serde_json::Value = serde_json::from_slice(&bulk_body).unwrap();
+        assert_eq!(bulk_json["freed_bytes"], 10);
+        assert!(!keep_file.exists());
+
+        // Delete playlist
+        let (c_del, _, _) = http_req(&srv, "DELETE", &format!("/api/playlists/{pl_id}"), &[], b"");
+        assert_eq!(c_del, 200);
+        let (_, _, after_body) = http_req(&srv, "GET", "/api/playlists", &[], b"");
+        let after_list: serde_json::Value = serde_json::from_slice(&after_body).unwrap();
+        assert!(!after_list
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["id"].as_i64() == Some(pl_id)));
+
+        srv.shutdown();
+        drop(db);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn stream_endpoint_serves_full_and_partial_range_bytes() {
+        let (root, db_path, cache) = test_dirs("stream");
+        let payload = b"0123456789ABCDEF";
+        std::fs::write(cache.join("testvid.m4a"), payload).unwrap();
+
+        let srv = WebRemote::start_test(db_path, cache, false).expect("start test server");
+
+        let (c_full, head_full, body_full) = http_req(&srv, "GET", "/api/stream/testvid", &[], b"");
+        assert_eq!(c_full, 200);
+        assert!(head_full.to_ascii_lowercase().contains("accept-ranges: bytes"));
+        assert_eq!(body_full, payload);
+
+        let (c_part, head_part, body_part) = http_req(
+            &srv,
+            "GET",
+            "/api/stream/testvid",
+            &[("Range", "bytes=4-9")],
+            b"",
+        );
+        assert_eq!(c_part, 206);
+        assert!(head_part.contains("Content-Range: bytes 4-9/16"));
+        assert_eq!(body_part, b"456789");
+
+        let (c_miss, _, _) = http_req(&srv, "GET", "/api/stream/missing", &[], b"");
+        assert_eq!(c_miss, 404);
+
+        srv.shutdown();
+        let _ = std::fs::remove_dir_all(root);
     }
 }

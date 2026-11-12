@@ -1,0 +1,259 @@
+export struct TrackRow {
+    title: string,
+    artist: string,
+    album: string,
+    duration: string,
+    is_offline: bool,
+    is_favorite: bool,
+    is_playing: bool,
+    is_artist: bool,
+    kind: string,
+    thumb: image,
+    has_thumb: bool,
+}
+
+export struct GridCard {
+    title: string,
+    subtitle: string,
+    count_label: string,
+    initial: string,
+    accent: color,
+    is_fav: bool,
+    thumb: image,
+    has_thumb: bool,
+}
+
+export struct PlaylistRow {
+    name: string,
+    count_label: string,
+    contains_target: bool,
+}
+
+export struct ThemeColors {
+    bg: color,
+    card: color,
+    card2: color,
+    dock: color,
+    border: color,
+    text: color,
+    muted: color,
+    accent: color,
+    accent-fg: color,
+    heart: color,
+    ok: color,
+}
+
+export component MarqueeText inherits Rectangle {
+    in property <string> text;
+    in property <color> text-color;
+    in property <length> font-size: 13px;
+    in property <int> font-weight: 700;
+    in property <bool> active: true;
+    min-width: 0px;
+    preferred-width: 0px;
+    horizontal-stretch: 1;
+    clip: true;
+    height: m.preferred-height;
+    Rectangle {
+        width: 0px;
+        height: 0px;
+        clip: true;
+        m := Text {
+            visible: false;
+            text: root.text;
+            font-size: root.font-size;
+            font-weight: root.font-weight;
+        }
+    }
+    property <length> over: max(0px, m.preferred-width - root.width);
+    property <float> over-f: over / 1px;
+    property <float> scroll-s: max(4.5, over-f / 22.0);
+    property <float> back-s: max(2.0, over-f / 55.0);
+    property <float> cycle: 2.5 + scroll-s + 1.8 + back-s;
+    if root.active && root.over > 0px : Text {
+        property <float> sec: mod(animation-tick() / 1s, cycle);
+        property <float> phase: sec < 2.5 ? 0.0 : (sec < (2.5 + scroll-s) ? (sec - 2.5) / scroll-s : (sec < (4.3 + scroll-s) ? 1.0 : 1.0 - (sec - 4.3 - scroll-s) / back-s));
+        x: -root.over * phase;
+        y: 0px;
+        text: root.text;
+        color: root.text-color;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+    }
+    if !(root.active && root.over > 0px) : Text {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        text: root.text;
+        color: root.text-color;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        overflow: elide;
+    }
+}
+
+export component GridHeaderBar inherits HorizontalLayout {
+    in property <ThemeColors> theme;
+    in property <string> heading;
+    in property <string> filter-text;
+    in property <string> placeholder;
+    in property <bool> fav-only;
+    in property <bool> search-focused: false;
+
+    height: 34px;
+    spacing: 10px;
+    Text {
+        text: root.heading;
+        color: root.theme.text;
+        font-size: 18px;
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        horizontal-stretch: 1;
+        border-radius: 10px;
+        background: root.search-focused ? root.theme.card2 : root.theme.card;
+        border-width: root.search-focused ? 2px : 1px;
+        border-color: root.search-focused ? root.theme.accent : root.theme.border;
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            spacing: 6px;
+            Path {
+                width: 13px;
+                height: 13px;
+                y: 10px;
+                viewbox-x: 0; viewbox-y: 0; viewbox-width: 24; viewbox-height: 24;
+                commands: "M11 4a7 7 0 1 0 0 14 7 7 0 1 0 0-14z M21 21l-4.35-4.35";
+                stroke: root.search-focused ? root.theme.accent : root.theme.muted;
+                stroke-width: 2.2px;
+            }
+            Text {
+                text: root.filter-text == ""
+                    ? (root.search-focused ? "Press A to open keyboard..." : root.placeholder)
+                    : ("Filter: " + root.filter-text);
+                color: root.search-focused ? root.theme.accent : (root.filter-text == "" ? root.theme.muted : root.theme.text);
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+        }
+    }
+    Rectangle {
+        width: 78px;
+        border-radius: 10px;
+        border-width: 1px;
+        border-color: root.theme.border;
+        background: root.fav-only ? root.theme.heart : root.theme.card;
+        Text {
+            text: "♥ Favs (Y)";
+            color: root.fav-only ? #ffffff : root.theme.text;
+            font-size: 11px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component KeyboardGrid inherits VerticalLayout {
+    in property <ThemeColors> theme;
+    in property <[string]> qwerty-keys;
+    in property <[string]> num-keys;
+    in property <bool> kbd-num-mode;
+    in property <int> key-row;
+    in property <int> key-col;
+    in property <bool> active: true;
+    in property <length> key-radius: 10px;
+    in property <length> key-font-size: 13px;
+
+    for r in [0, 1, 2] : HorizontalLayout {
+        spacing: 5px;
+        vertical-stretch: 1;
+        for c in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] : Rectangle {
+            property <string> k-txt: (root.kbd-num-mode ? root.num-keys[r * 10 + c] : root.qwerty-keys[r * 10 + c]);
+            property <bool> cur: (root.active && root.key-row == r && root.key-col == c);
+            horizontal-stretch: 1;
+            border-radius: root.key-radius;
+            border-width: 1px;
+            border-color: cur ? root.theme.accent : root.theme.border;
+            background: cur ? root.theme.accent : (k-txt == "GO" ? root.theme.accent : (k-txt == "DEL" ? root.theme.heart : root.theme.card2));
+            Text {
+                text: k-txt;
+                color: (cur || k-txt == "GO") ? root.theme.accent-fg : (k-txt == "DEL" ? #ffffff : root.theme.text);
+                font-size: root.key-font-size;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+export component TrackListRow inherits Rectangle {
+    in property <ThemeColors> theme;
+    in property <TrackRow> tr;
+    in property <int> idx;
+    in property <int> list-index;
+    in property <int> list-scroll;
+    in property <bool> detail-top-focused;
+    in property <bool> show-playing-prefix: false;
+
+    property <bool> sel: !root.detail-top-focused && root.list-index == root.idx;
+    x: 0px;
+    y: (root.idx - root.list-scroll) * 50px;
+    height: 50px;
+    visible: root.idx >= root.list-scroll && (root.idx - root.list-scroll) < 6;
+    background: sel ? root.theme.card2 : transparent;
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 10px;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            MarqueeText {
+                text: (root.show-playing-prefix && root.tr.is_playing ? "▶ " : "") + root.tr.title;
+                text-color: sel ? root.theme.accent : root.theme.text;
+                font-size: 13px;
+                font-weight: 700;
+                active: sel;
+            }
+            MarqueeText {
+                text: root.tr.album == "" ? root.tr.artist : (root.tr.artist + " · " + root.tr.album);
+                text-color: root.theme.muted;
+                font-size: 11px;
+                font-weight: 600;
+                active: sel;
+            }
+        }
+        Text {
+            text: root.tr.is_favorite ? "♥" : "♡";
+            color: root.tr.is_favorite ? root.theme.heart : root.theme.muted;
+            font-size: 12px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+        Text {
+            text: root.tr.is_offline ? "✓" : "↓";
+            color: root.tr.is_offline ? root.theme.ok : root.theme.muted;
+            font-size: 12px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+        Text {
+            text: root.tr.duration;
+            color: root.theme.muted;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
+    }
+    Rectangle {
+        x: 0px;
+        y: 49px;
+        width: parent.width;
+        height: 1px;
+        background: root.theme.border;
+    }
+}

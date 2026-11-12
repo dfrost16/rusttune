@@ -3429,8 +3429,9 @@ dependencies = [
 
 [[package]]
 name = "rusttune"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
+ "chrono",
  "fontique",
  "image",
  "libloading 0.9.0",

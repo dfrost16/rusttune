@@ -58,6 +58,30 @@ pub fn read_battery_label() -> String {
     "AC".to_string()
 }
 
+pub fn parse_battery_pct(label: &str) -> f32 {
+    label
+        .trim_end_matches('%')
+        .trim()
+        .parse::<f32>()
+        .map(|v| (v / 100.0).clamp(0.0, 1.0))
+        .unwrap_or(1.0)
+}
+
+pub fn local_clock_digits() -> [String; 4] {
+    let s = chrono::Local::now().format("%H%M").to_string();
+    let b = s.as_bytes();
+    if b.len() == 4 {
+        [
+            (b[0] as char).to_string(),
+            (b[1] as char).to_string(),
+            (b[2] as char).to_string(),
+            (b[3] as char).to_string(),
+        ]
+    } else {
+        ["0".into(), "0".into(), "0".into(), "0".into()]
+    }
+}
+
 pub fn fmt_time(secs: u64) -> String {
     format!("{}:{:02}", secs / 60, secs % 60)
 }
@@ -225,5 +249,16 @@ mod tests {
 
         let gray: Vec<u8> = [120u8, 120, 120, 255].repeat(16 * 16);
         assert!(extract_cover_accent(&gray, 16, 16).is_none());
+    }
+
+    #[test]
+    fn parses_battery_pct_and_formats_clock_digits() {
+        assert!((parse_battery_pct("84%") - 0.84).abs() < 0.001);
+        assert!((parse_battery_pct("AC") - 1.0).abs() < 0.001);
+        assert!((parse_battery_pct("150%") - 1.0).abs() < 0.001);
+
+        let digits = local_clock_digits();
+        assert_eq!(digits.len(), 4);
+        assert!(digits.iter().all(|d| d.len() == 1 && d.chars().all(|c| c.is_ascii_digit())));
     }
 }
